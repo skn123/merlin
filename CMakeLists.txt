@@ -1,12 +1,24 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.10)
+cmake_policy(SET CMP0167 NEW)
+
 project(merlin VERSION 0.1.0)
 
 include(CTest)
 enable_testing()
-set (CMAKE_CXX_STANDARD 11)
-find_package(Boost COMPONENTS program_options thread REQUIRED)
 
-include_directories(include)
+# Set the C++ standard
+set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Optionally specify Boost root if installed via Homebrew
+set(BOOST_ROOT "/opt/homebrew/opt/boost")
+set(BOOST_INCLUDEDIR "${BOOST_ROOT}/include")
+set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib")
+
+# Find Boost
+find_package(Boost REQUIRED COMPONENTS program_options thread)
+set(BOOST_USE_STATIC_LIBS ON)
+include_directories(include ${Boost_INCLUDE_DIRS})
 
 add_executable(merlin 
     src/main.cpp
@@ -49,8 +61,8 @@ add_executable(merlin
     include/wmb.h    
 )
 
-set(LINK_LIBS dl ${Boost_LIBRARIES})
-
+set(LINK_LIBS ${Boost_LIBRARIES})
+link_directories(${Boost_LIBRARY_DIRS})
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBS} ${LINK_LIBS})
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
