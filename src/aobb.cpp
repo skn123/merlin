@@ -51,6 +51,47 @@ double aobb::label(vindex var, const std::vector<size_t>& asgn) const {
 	return lbl;
 }
 
+// Greedily complete a partial assignment and, if the resulting complete
+// assignment improves the incumbent, record it. Used for MAP anytime: any full
+// assignment has an exactly computable value (product of all factors), so it is
+// a valid lower bound on the optimum and always available on a time-out.
+void aobb::update_incumbent(const std::vector<size_t>& partial) {
+	size_t n = m_gmo.nvar();
+	std::vector<size_t> a = partial;
+	// Assign variables root->leaf (largest position first), so a variable's
+	// ancestors are fixed before it -- greedily maximizing label * heuristic.
+	for (size_t oi = m_order.size(); oi-- > 0; ) {
+		vindex x = m_order[oi];
+		if (x >= n || a[x] != (size_t) -1) continue; // already fixed
+		size_t dom = m_gmo.var(x).states();
+		size_t best_v = 0;
+		double best_s = -1.0;      // best heuristic-weighted score
+		size_t feasible_v = dom;   // first value with a strictly positive label
+		for (size_t v = 0; v < dom; ++v) {
+			a[x] = v;
+			double lbl = label(x, a);
+			if (lbl > 0.0 && feasible_v == dom) feasible_v = v;
+			double s = (lbl == 0.0) ? 0.0 : lbl * m_heuristic.get_heuristic(x, a);
+			if (s > best_s) { best_s = s; best_v = v; }
+		}
+		// Prefer the heuristic-best value, but if it has zero label (a hard
+		// determinism conflict) fall back to any feasible value so the greedy
+		// completion stays a positive-probability assignment where one exists.
+		if (best_s <= 0.0 && feasible_v != dom) best_v = feasible_v;
+		a[x] = best_v;
+	}
+	// Any variable still unset (e.g. not in the order) gets value 0.
+	for (size_t v = 0; v < n; ++v)
+		if (a[v] == (size_t) -1) a[v] = 0;
+
+	double val = std::exp(m_gmo.logP(a)); // exact value of this complete assignment
+	if (val > m_lb_linear) {
+		m_lb_linear = val;
+		m_best_config.assign(a.begin(), a.end());
+		m_found_solution = true;
+	}
+}
+
 // Upper bound on the best complete solution consistent with the partial path
 // from the root down through node 'n'. Walk up to the root, combining the
 // committed labels (AND) and the sub-tree bounds of siblings (already-solved
@@ -258,6 +299,8 @@ void aobb::init() {
 	m_best_config.assign(n, 0);
 	m_num_expansions = 0;
 	m_num_cache_hits = 0;
+	m_proved_optimal = false;
+	m_found_solution = false;
 
 	// OR value cache (one table per variable).
 	m_cache.clear();
@@ -310,7 +353,29 @@ void aobb::run() {
 	for (size_t i = 0; i < super->children.size(); ++i)
 		stk.push(super->children[i]);
 
+	// Seed an initial incumbent by greedily completing the empty assignment
+	// (MAP only: for MAP every full assignment has an exactly computable value).
+	// This guarantees a valid best-so-far solution even if the search is cut off
+	// almost immediately.
+	if (m_task == Task::MAP) {
+		std::vector<size_t> empty(n, (size_t) -1);
+		update_incumbent(empty);
+	}
+
+	bool timed_out = false;
+	size_t steps = 0;
+	double last_incumbent_time = m_start_time; // last time the greedy incumbent ran
+
 	while (!stk.empty()) {
+		// Time-limit check. Poll the clock every 1024 node visits so the limit
+		// is honored promptly without calling timeSystem() on every step.
+		if (m_time_limit > 0.0 && (++steps & 0x3FF) == 0) {
+			if (timeSystem() - m_start_time >= m_time_limit) {
+				timed_out = true;
+				break;
+			}
+		}
+
 		ao_node* node = stk.top();
 
 		if (!node->expanded) {
@@ -410,6 +475,18 @@ void aobb::run() {
 					best_sub[node].clear();
 					best_sub[node].push_back(std::make_pair(x, node->val));
 					// leave asgn[x] set until this node is popped/aggregated
+
+					// Anytime (MAP): the current spine is a partial assignment;
+					// greedily complete it to refresh the best-so-far incumbent.
+					// Throttled to avoid dominating the search on large models
+					// (a full greedy sweep is O(nvar) per call).
+					if (m_task == Task::MAP && m_time_limit > 0.0) {
+						double now = timeSystem();
+						if (now - last_incumbent_time >= 0.25) {
+							update_incumbent(asgn);
+							last_incumbent_time = now;
+						}
+					}
 				} else {
 					// Generate OR children (one per pseudo-tree child variable).
 					// Seed each child's heuristic now (given the current partial
@@ -520,38 +597,56 @@ void aobb::run() {
 			if (par->num_children_pending > 0)
 				par->num_children_pending--;
 		} else {
-			// This is the super-root: the search is complete.
+			// This is the super-root: the search has completed and node->value
+			// is the proven optimum. Adopt it as the incumbent and record the
+			// exact optimal assignment (overrides any greedy incumbent).
 			m_lb_linear = node->value;
-			// Reconstruct the best complete assignment from best_sub[super].
 			std::vector<std::pair<vindex, size_t> >& sub = best_sub[node];
 			for (size_t i = 0; i < sub.size(); ++i)
 				best_asgn[sub[i].first] = sub[i].second;
+			for (size_t i = 0; i < n; ++i) m_best_config[i] = best_asgn[i];
+			m_found_solution = true;
+			m_proved_optimal = true;
 			best_sub.erase(node);
 			++m_num_expansions;
 		}
 	}
 
-	free_subtree(super); // no-op: children already freed, but delete the root
-	// (super was popped; delete explicitly)
-	// Note: super's children vector is empty here so free_subtree only deletes super.
+	// Release the AND/OR search tree. Every live node is reachable from the
+	// super-root through the children vectors (a node is removed from its
+	// parent's children only when the parent is aggregated, which frees it), so
+	// a single recursive free reclaims everything -- the whole remaining forest
+	// on a time-out, or just the super-root after a completed search.
+	free_subtree(super);
 
-	// Store the best configuration and report in log space.
-	m_best_config.assign(n, 0);
-	for (size_t i = 0; i < n; ++i) m_best_config[i] = best_asgn[i];
-	m_logz = std::log(m_lb_linear);
+	// m_best_config / m_lb_linear already hold the best solution found (the
+	// proven optimum if the search completed, otherwise the best anytime
+	// incumbent). Report the value in log space.
+	m_logz = (m_lb_linear > 0.0) ? std::log(m_lb_linear)
+			: -std::numeric_limits<double>::infinity();
 
 	std::cout << "[AOBB] Finished searching in "
 			<< (timeSystem() - m_start_time) << " seconds" << std::endl;
 	if (m_caching)
 		std::cout << "[AOBB] + cache hits       : " << m_num_cache_hits << std::endl;
-	std::cout << "[AOBB] Optimal value      : " << m_logz << " ("
-			<< std::exp(m_logz) << ")" << std::endl;
+	if (timed_out)
+		std::cout << "[AOBB] + status           : time limit reached (suboptimal)"
+				<< std::endl;
+	if (!m_found_solution)
+		std::cout << "[AOBB] + status           : no complete solution found within "
+				"the time limit" << std::endl;
+	std::cout << "[AOBB] " << (m_proved_optimal ? "Optimal value      : " : "Best value so far  : ")
+			<< m_logz << " (" << std::exp(m_logz) << ")" << std::endl;
 }
 
 // Write the solution to the output stream.
 void aobb::write_solution(std::ostream& out, const std::map<size_t, size_t>& evidence,
 		const std::map<size_t, size_t>& old2new, const graphical_model& orig,
 		const std::set<size_t>& dummies, int output_format) {
+
+	// Status: "true" (proven optimal) or "false" (time-limit reached, the
+	// reported value/assignment is the best found so far, not proven optimal).
+	const char* status = m_proved_optimal ? "true" : "false";
 
 	if (output_format == MERLIN_OUTPUT_JSON) {
 		out << "{";
@@ -564,7 +659,8 @@ void aobb::write_solution(std::ostream& out, const std::map<size_t, size_t>& evi
 			out << " \"value\" : " << std::fixed
 				<< std::setprecision(MERLIN_PRECISION)
 				<< (m_logz + std::log(orig.get_global_const())) << ", ";
-			out << " \"status\" : \"true\", ";
+			out << " \"status\" : \"" << status << "\", ";
+			out << " \"optimal\" : " << (m_proved_optimal ? "true" : "false") << ", ";
 			out << " \"solution\" : [ ";
 			for (vindex i = 0; i < orig.nvar(); ++i) {
 				if (dummies.find(i) != dummies.end()) continue;
@@ -586,7 +682,8 @@ void aobb::write_solution(std::ostream& out, const std::map<size_t, size_t>& evi
 			out << " \"value\" : " << std::fixed
 				<< std::setprecision(MERLIN_PRECISION)
 				<< (m_logz + std::log(orig.get_global_const())) << ", ";
-			out << " \"status\" : \"true\", ";
+			out << " \"status\" : \"" << status << "\", ";
+			out << " \"optimal\" : " << (m_proved_optimal ? "true" : "false") << ", ";
 			out << " \"solution\" : [ ";
 			for (vindex i = 0; i < m_query.size(); ++i) {
 				vindex j = m_query[i];

@@ -71,6 +71,8 @@ int main(int argc, char** argv) {
 	eng.set_threshold(opt->threshold);
 	eng.set_alpha(opt->alpha);
 	eng.set_init_factor_method(opt->initFactors);
+	if (opt->timeLimit > 0)
+		eng.set_time_limit(opt->timeLimit);
 
 	// Run the inference
 	eng.init();

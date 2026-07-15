@@ -70,6 +70,7 @@ protected:
 	double m_threshold;					///< Threshold value
 	double m_alpha;						///< Equivalent sample size
 	int m_initFactors;					///< Factor initialization method
+	double m_timeLimit;					///< Search time limit in seconds (<=0 = unlimited)
 
 private:
 	// Local members:
@@ -191,6 +192,17 @@ public:
 	/// \return The threshold value.
 	///
 	double get_threshold() const { return m_threshold; }
+
+	///
+	/// \brief Set the search time limit (seconds; <=0 means unlimited).
+	/// \param t	The time limit in seconds.
+	///
+	void set_time_limit(double t) { m_timeLimit = t; }
+	///
+	/// \brief Get the search time limit.
+	/// \return The time limit in seconds.
+	///
+	double get_time_limit() const { return m_timeLimit; }
 
 	///
 	/// \brief Set the equivalent sample size.

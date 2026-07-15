@@ -50,6 +50,7 @@ Merlin::Merlin() {
 	m_ioTime = 0;
 	m_positive = false;
 	m_threshold = 1e-06;
+	m_timeLimit = 0.0; // 0 = unlimited
 }
 
 ///
@@ -1095,6 +1096,7 @@ int Merlin::run() {
 					<< "Order=MinFill" << ","
 					<< "OrderIter=100" << ","
 					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
 					<< "Task=MAP";
 				s.set_properties(oss.str());
 				std::vector<vindex> qvars;
@@ -1167,6 +1169,7 @@ int Merlin::run() {
 					<< "Order=MinFill" << ","
 					<< "OrderIter=100" << ","
 					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
 					<< "Task=MMAP";
 				s.set_properties(oss.str());
 				std::vector<size_t> qvars;

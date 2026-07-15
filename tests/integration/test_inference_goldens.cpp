@@ -297,3 +297,32 @@ TEST(Integration, Simple5MMAPAobbIsExact) {
     for (size_t i = 0; i < 3; ++i)
         EXPECT_EQ(cfg[i], expected[i]) << "query variable " << i;
 }
+
+// A generous time limit does not change the result: the search still completes
+// and reports the proven optimum with an "optimal" status in the JSON output.
+TEST(Integration, CancerMAPAobbTimeLimitStillOptimal) {
+    const std::string out_base = tmp_path("cancer_map_aobb_tl");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("cancer.uai"));
+    eng.set_evidence_file(data_path("cancer.evid"));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(MERLIN_ALGO_AOBB);
+    eng.set_time_limit(60.0);                 // ample: search completes well within
+    eng.set_output_format(MERLIN_OUTPUT_JSON);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MAP.json");
+    ASSERT_FALSE(produced.empty()) << "no MAP JSON output produced";
+    // Completed search => proven optimal.
+    EXPECT_NE(produced.find("\"optimal\" : true"), std::string::npos)
+        << "expected optimal:true in: " << produced;
+    EXPECT_NE(produced.find("\"status\" : \"true\""), std::string::npos);
+    // The optimum value is unchanged by the (unreached) time limit.
+    EXPECT_NE(produced.find("\"value\" : -2.617844"), std::string::npos)
+        << produced;
+}

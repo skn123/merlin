@@ -85,6 +85,11 @@ public:
 	double lb() const { return m_logz; }                   ///< value of the best solution found (log)
 	std::vector<index> best_config() const { return m_best_config; }
 
+	/// \brief true if the search completed and the reported solution is proven optimal.
+	bool is_optimal() const { return m_proved_optimal; }
+	/// \brief true if any complete solution was found (false => no solution within the time limit).
+	bool found_solution() const { return m_found_solution; }
+
 	// Partition-function interface (not meaningful for search; stubbed):
 
 	double logZ() const { return m_logz; }
@@ -109,7 +114,7 @@ public:
 	///
 	/// \brief Properties of the algorithm.
 	///
-	MER_ENUM( Property , iBound,Order,Iter,Task,Debug,OrderIter,Cache );
+	MER_ENUM( Property , iBound,Order,Iter,Task,Debug,OrderIter,Cache,TimeLimit );
 
 public:
 	// Setters:
@@ -143,11 +148,12 @@ public:
 	///
 	virtual void set_properties(std::string opt = std::string()) {
 		if (opt.length() == 0) {
-			set_properties("iBound=10,Order=MinFill,Iter=100,Task=MMAP,Debug=0,OrderIter=1,Cache=1");
+			set_properties("iBound=10,Order=MinFill,Iter=100,Task=MMAP,Debug=0,OrderIter=1,Cache=1,TimeLimit=0");
 			return;
 		}
 		m_debug = false;
 		m_caching = true;
+		m_time_limit = 0.0;
 		std::vector<std::string> strs = split(opt, ',');
 		for (size_t i = 0; i < strs.size(); ++i) {
 			std::vector<std::string> asgn = split(strs[i], '=');
@@ -174,6 +180,9 @@ public:
 				break;
 			case Property::Cache:
 				m_caching = (atol(asgn[1].c_str()) == 0) ? false : true;
+				break;
+			case Property::TimeLimit:
+				m_time_limit = atof(asgn[1].c_str());
 				break;
 			default:
 				break;
@@ -219,6 +228,15 @@ protected:
 	double label(vindex var, const std::vector<size_t>& asgn) const;
 
 	///
+	/// \brief Complete a partial assignment greedily (best label*heuristic per
+	///        variable, in pseudo-tree order) and, if the resulting complete
+	///        assignment improves the incumbent, record it. Used to keep an
+	///        always-available best-so-far solution for the anytime/time-limit
+	///        mode. \c partial holds the fixed variables (>=0), others are -1.
+	///
+	void update_incumbent(const std::vector<size_t>& partial);
+
+	///
 	/// \brief Upper bound on the best complete solution consistent with the
 	///        partial path from the root down to \c n (linear). Used for pruning.
 	///
@@ -248,6 +266,9 @@ protected:
 	wmb m_heuristic;					///< The WMB heuristic engine
 	bool m_caching;						///< Enable OR caching (phase 2)
 	bool m_debug;						///< Internal debugging flag
+	double m_time_limit;				///< Search time limit in seconds (0 = unlimited)
+	bool m_proved_optimal;				///< true if the search completed (optimum proved)
+	bool m_found_solution;				///< true if any complete solution was found
 
 	// OR caching: per variable, the context (ancestors whose assignment
 	// determines the sub-problem below the variable) and a table mapping the
