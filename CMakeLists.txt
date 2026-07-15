@@ -9,6 +9,12 @@ include(CTest)
 enable_testing()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Use Boost's own BoostConfig.cmake (config mode) instead of the deprecated
+# bundled FindBoost module (removed path; see policy CMP0167, CMake >= 3.30).
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif()
 find_package(Boost COMPONENTS program_options thread REQUIRED)
 
 include_directories(include)
@@ -61,9 +67,7 @@ add_executable(merlin
     include/wmb.h    
 )
 
-set(LINK_LIBS dl ${Boost_LIBRARIES})
-
-target_link_libraries(${PROJECT_NAME} ${LINK_LIBS} ${LINK_LIBS})
+target_link_libraries(${PROJECT_NAME} dl Boost::program_options Boost::thread)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

@@ -20,7 +20,8 @@ include(GoogleTest)
 set(MERLIN_TEST_LIBS
     GTest::gtest_main
     dl
-    ${Boost_LIBRARIES}
+    Boost::program_options
+    Boost::thread
 )
 
 # ----- Unit tests -----

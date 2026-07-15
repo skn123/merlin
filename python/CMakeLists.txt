@@ -21,4 +21,4 @@ pybind11_add_module(merlin_python
 
 set_target_properties(merlin_python PROPERTIES OUTPUT_NAME merlin)
 target_include_directories(merlin_python PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(merlin_python PRIVATE dl ${Boost_LIBRARIES})
+target_link_libraries(merlin_python PRIVATE dl Boost::program_options Boost::thread)
