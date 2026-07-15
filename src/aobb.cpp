@@ -43,7 +43,12 @@ double aobb::label(vindex var, const std::vector<size_t>& asgn) const {
 		size_t idx = 0, stride = 1;
 		for (variable_set::const_iterator vi = sc.begin(); vi != sc.end(); ++vi) {
 			vindex v = vi->label();
-			idx += stride * asgn[v];
+			// A scope variable may be unset (== -1) if it was omitted from the
+			// elimination order (e.g. a cardinality-1 variable): treat it as
+			// value 0, which is exact for singleton domains and avoids an index
+			// underflow into the factor table.
+			size_t vv = (asgn[v] == (size_t) -1) ? 0 : asgn[v];
+			idx += stride * vv;
 			stride *= vi->states();
 		}
 		lbl *= f.get(idx);

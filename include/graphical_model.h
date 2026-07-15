@@ -1181,9 +1181,17 @@ public:
 				else map_vars.erase(v);
 			}
 
-			// anything left to eliminate? If not, we are done!
+			// No non-simplicial candidate in the CURRENT set (SUM or MAP). If
+			// nodes still remain, the current set was just emptied (all of its
+			// remaining vars were simplicial) -- loop again so the next
+			// iteration switches to the other set (SUM -> MAP). Only stop once
+			// every node has been eliminated; otherwise MAP/query variables
+			// would be silently dropped from the order (producing an incomplete
+			// order and, downstream, wrong MMAP results / out-of-range access).
 			if (min_score == std::numeric_limits<int>::max()) {
-				break;
+				if (num_nodes == 0)
+					break;
+				continue;
 			}
 
 			// Pick one of the minimal score nodes (with score >= 1),
