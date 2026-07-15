@@ -1,13 +1,20 @@
-# Contact
+# Merlin
 
-Radu Marinescu (`radu.marinescu@ie.ibm.com`)
+![Version](https://img.shields.io/badge/version-1.7.0-blue)
+![Language](https://img.shields.io/badge/C%2B%2B-11-00599C?logo=cplusplus)
+![Build](https://img.shields.io/badge/build-CMake%20%E2%89%A5%203.14-064F8C?logo=cmake&logoColor=white)
+![Boost](https://img.shields.io/badge/dependency-Boost-orange)
+![License](https://img.shields.io/badge/license-BSD--3--Clause-green)
+
+A standalone C++ solver for exact and approximate probabilistic inference over
+graphical models (Bayesian networks and Markov networks).
+
 
 # Description
 
 Merlin is a standalone solver written in `C++` that implements state-of-the-art exact
 and approximate algorithms for probabilistic inference over graphical models
-including both directed and undirected models (e.g., Bayesian networks,
-Markov Random Fields). Merlin supports the most common probabilistic inference tasks such as
+including both directed and undirected models such as Bayesian and Markov networks. Merlin supports the most common probabilistic inference tasks such as
 computing the partition function or probability of evidence (PR), posterior
 marginals (MAR), as well as MAP (also known as maximum aposteriori or most
 probable explanation) and Marginal MAP configurations. In addition, Merlin supports
@@ -568,3 +575,8 @@ The solution contains only the query variables, indexed as in the input query fi
             }
         ]
     }
+
+# Contact
+
+Radu Marinescu (`radu.marinescu@ie.ibm.com`)
+
