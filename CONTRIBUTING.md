@@ -13,7 +13,7 @@ how to submit changes.
 
 ## Building
 
-Merlin is built with CMake (>= 3.14) and requires a C++11 compiler and the
+Merlin is built with CMake (>= 3.14) and requires a C++17 compiler and the
 Boost `program_options` and `thread` libraries. See the "Build" section of
 [README.md](README.md) for full prerequisites and instructions. In short:
 

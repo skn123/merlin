@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Merlin is a standalone C++ solver for probabilistic inference over graphical models (Bayesian networks, Markov random fields). It supports the tasks PR (partition function / probability of evidence), MAR (posterior marginals), MAP, MMAP (marginal MAP), and EM (maximum-likelihood parameter learning for Bayes nets only). Inference algorithms include Loopy Belief Propagation (LBP), Iterative Join-Graph Propagation (IJGP), Join-Graph Linear Programming (JGLP), Weighted Mini-Bucket (WMB), Bucket-Tree Elimination (BTE), Clique-Tree Elimination (CTE), and Gibbs sampling. WMB/IJGP/JGLP are parameterized by an **i-bound** that trades accuracy for cost (i-bound ≥ treewidth gives exact inference).
 
-Requires **boost** (linked against `boost_program_options`, and `boost_thread` via CMake). Built with CMake at C++11.
+Requires **boost** (linked against `boost_program_options`, and `boost_thread` via CMake). Built with CMake at C++17.
 
 ## Build & run
 

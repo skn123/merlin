@@ -1,7 +1,7 @@
 # Merlin
 
 ![Version](https://img.shields.io/badge/version-1.7.0-blue)
-![Language](https://img.shields.io/badge/C%2B%2B-11-00599C?logo=cplusplus)
+![Language](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Build](https://img.shields.io/badge/build-CMake%20%E2%89%A5%203.14-064F8C?logo=cmake&logoColor=white)
 ![Boost](https://img.shields.io/badge/dependency-Boost-orange)
 ![License](https://img.shields.io/badge/license-BSD--3--Clause-green)
@@ -136,7 +136,7 @@ Merlin is built with [CMake](https://cmake.org/) (version 3.14 or newer).
 
 ## Prerequisites
 
-- A C++11 compiler (e.g. `g++`, `clang++`).
+- A C++17 compiler (e.g. `g++`, `clang++`).
 - CMake `>= 3.14`.
 - The [Boost](https://www.boost.org/) libraries, including `boost_program_options`
   and `boost_thread`.
