@@ -114,7 +114,7 @@ values for the `t` parameter are:
 # Source Code
 
 The source code is organized along the following directory structure and
-requires a standard GNU build using the GNU Autotools toolchain.
+is built with CMake (the Python API is built with `Makefile.pybind`).
 
 - `src` - contains the source files
 - `include` - contains the header files
@@ -125,13 +125,50 @@ requires a standard GNU build using the GNU Autotools toolchain.
 
 # Build
 
-The simplest way to compile the solver is to use `cmake`, as follows:
+Merlin is built with [CMake](https://cmake.org/) (version 3.14 or newer).
+
+## Prerequisites
+
+- A C++11 compiler (e.g. `g++`, `clang++`).
+- CMake `>= 3.14`.
+- The [Boost](https://www.boost.org/) libraries, including `boost_program_options`
+  and `boost_thread`.
+
+On Debian/Ubuntu these can be installed with:
 ```
-mkdir build
-cd build
-cmake ..
-cmake --build .
+sudo apt-get install build-essential cmake libboost-all-dev
 ```
+On macOS with [Homebrew](https://brew.sh/):
+```
+brew install cmake boost
+```
+
+## Building the solver
+
+From the root of the repository, configure and build:
+```
+cmake -S . -B build
+cmake --build build
+```
+This produces the `merlin` executable in the `build/` directory. Verify it with:
+```
+./build/merlin --help
+```
+
+To make a release (optimized) build, configure with:
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+## Running the tests
+
+Merlin ships with a test suite (built by default). After building, run it with:
+```
+ctest --test-dir build --output-on-failure
+```
+The tests are enabled via the `MERLIN_BUILD_TESTS` option (`ON` by default). To
+build the solver without the tests, configure with `-DMERLIN_BUILD_TESTS=OFF`.
 
 ## Building the Python API
 
