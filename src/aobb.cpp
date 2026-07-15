@@ -602,14 +602,21 @@ void aobb::run() {
 			if (par->num_children_pending > 0)
 				par->num_children_pending--;
 		} else {
-			// This is the super-root: the search has completed and node->value
-			// is the proven optimum. Adopt it as the incumbent and record the
-			// exact optimal assignment (overrides any greedy incumbent).
-			m_lb_linear = node->value;
-			std::vector<std::pair<vindex, size_t> >& sub = best_sub[node];
-			for (size_t i = 0; i < sub.size(); ++i)
-				best_asgn[sub[i].first] = sub[i].second;
-			for (size_t i = 0; i < n; ++i) m_best_config[i] = best_asgn[i];
+			// This is the super-root: the search has completed, so the optimum is
+			// proven. node->value is the best value found by the search itself;
+			// but branch-and-bound prunes any branch whose bound is <= the
+			// current incumbent (a value already seeded/found by the greedy
+			// update_incumbent), so when that incumbent already equals the
+			// optimum the search short-circuits and node->value can be smaller.
+			// Adopt node->value only if it strictly improves on the incumbent;
+			// otherwise keep the incumbent's value and assignment.
+			if (node->value > m_lb_linear) {
+				m_lb_linear = node->value;
+				std::vector<std::pair<vindex, size_t> >& sub = best_sub[node];
+				for (size_t i = 0; i < sub.size(); ++i)
+					best_asgn[sub[i].first] = sub[i].second;
+				for (size_t i = 0; i < n; ++i) m_best_config[i] = best_asgn[i];
+			}
 			m_found_solution = true;
 			m_proved_optimal = true;
 			best_sub.erase(node);

@@ -352,12 +352,19 @@ void braobb::run() {
 		st->pop();
 		ao_node* par = node->parent;
 		if (par == NULL) {
-			// Super-root solved: search complete => proven optimum.
-			m_lb_linear = node->value;
-			std::vector<std::pair<vindex, size_t> >& sub = best_sub[node];
-			for (size_t i = 0; i < sub.size(); ++i)
-				best_asgn[sub[i].first] = sub[i].second;
-			for (size_t i = 0; i < n; ++i) m_best_config[i] = best_asgn[i];
+			// Super-root solved: the optimum is proven. Branch-and-bound prunes
+			// any branch whose bound is <= the current incumbent (seeded/found
+			// by the greedy update_incumbent), so when that incumbent already
+			// equals the optimum the search short-circuits and node->value can
+			// be smaller. Adopt node->value only if it strictly improves on the
+			// incumbent; otherwise keep the incumbent's value and assignment.
+			if (node->value > m_lb_linear) {
+				m_lb_linear = node->value;
+				std::vector<std::pair<vindex, size_t> >& sub = best_sub[node];
+				for (size_t i = 0; i < sub.size(); ++i)
+					best_asgn[sub[i].first] = sub[i].second;
+				for (size_t i = 0; i < n; ++i) m_best_config[i] = best_asgn[i];
+			}
 			m_found_solution = true;
 			m_proved_optimal = true;
 			best_sub.erase(node);
