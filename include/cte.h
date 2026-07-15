@@ -128,13 +128,56 @@ public:
 	}
 
 	~cte() {
-		for (std::vector<detail::edge*>::iterator i = m_edges.begin();
-				i != m_edges.end(); ++i) {
-			delete *i;
-		}
-		m_edges.clear();
-		m_messages.clear();
+		free_tree();
 	};
+
+	///
+	/// \brief Copy constructor.
+	///
+	/// Copies only the input/configuration state (model, task, ordering,
+	/// properties). The clique-tree scratch state (m_root, m_clusters,
+	/// m_edges, m_messages, ...) owns raw pointers and is rebuilt by init(),
+	/// so it is NOT copied -- copying those pointers would alias ownership and
+	/// double-free. Defining these explicitly also silences the deprecation of
+	/// implicit copies for a class with a user-provided destructor.
+	///
+	cte(const cte& other) : graphical_model(other),
+			m_gmo(other.m_gmo), m_task(other.m_task),
+			m_order_method(other.m_order_method), m_logz(other.m_logz),
+			m_order(other.m_order), m_beliefs(other.m_beliefs),
+			m_query(other.m_query), m_marginal(other.m_marginal),
+			m_evidence(other.m_evidence),
+			m_root(NULL), m_clusters(), m_edges(), m_messages(),
+			m_var2clique(), m_debug(other.m_debug), m_verbose(other.m_verbose) {
+	}
+
+	///
+	/// \brief Copy assignment.
+	///
+	cte& operator=(const cte& other) {
+		if (this != &other) {
+			free_tree();
+			graphical_model::operator=(other);
+			m_gmo = other.m_gmo;
+			m_task = other.m_task;
+			m_order_method = other.m_order_method;
+			m_logz = other.m_logz;
+			m_order = other.m_order;
+			m_beliefs = other.m_beliefs;
+			m_query = other.m_query;
+			m_marginal = other.m_marginal;
+			m_evidence = other.m_evidence;
+			m_debug = other.m_debug;
+			m_verbose = other.m_verbose;
+			// Reset the (rebuilt-by-init) clique-tree scratch state.
+			m_root = NULL;
+			m_clusters.clear();
+			m_edges.clear();
+			m_messages.clear();
+			m_var2clique.clear();
+		}
+		return *this;
+	}
 
 	///
 	/// \brief Clone the algorithm.
@@ -447,6 +490,19 @@ protected:
 	std::vector<int> m_evidence;		///< Evidence propagated during EM learning
 
 private:
+
+	///
+	/// \brief Release the owned clique-tree edge objects.
+	///
+	void free_tree() {
+		for (std::vector<detail::edge*>::iterator i = m_edges.begin();
+				i != m_edges.end(); ++i) {
+			delete *i;
+		}
+		m_edges.clear();
+		m_messages.clear();
+	}
+
 	// CT local structures:
 
 	detail::node* m_root;					///< Clique tree root

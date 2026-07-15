@@ -88,7 +88,8 @@ public:
 			m_observed(false),
 			m_virtual(true) {};
 
-	~observation() {};
+	// No user-declared destructor: the implicit destructor and copy operations
+	// are correct for this value type.
 };
 
 } // end namespace

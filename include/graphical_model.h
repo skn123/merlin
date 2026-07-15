@@ -891,7 +891,7 @@ public:
 		if (ord_type == OrderMethod::Random) {	// random orders are treated here
 			for (size_t i = 0; i < nvar(); i++)
 				order[i] = var(i).label();	// build a list of all the variables
-			std::random_shuffle(order.begin(), order.end());// and randomly permute them
+			rand_shuffle(order.begin(), order.end());// and randomly permute them
 			return order;						    		// then return
 		}
 
@@ -950,7 +950,7 @@ public:
 			order.resize(nvar());
 			for (size_t i = 0; i < nvar(); i++)
 				order[i] = var(i).label();	//   build a list of all the variables
-			std::random_shuffle(order.begin(), order.end());//   and randomly permute them
+			rand_shuffle(order.begin(), order.end());//   and randomly permute them
 			return order;											//   then return
 		}
 
@@ -1263,8 +1263,8 @@ public:
 				else sumOrd.push_back(var(i).label());
 			}
 
-			std::random_shuffle(sumOrd.begin(), sumOrd.end());//   and randomly permute them
-			std::random_shuffle(maxOrd.begin(), maxOrd.end());
+			rand_shuffle(sumOrd.begin(), sumOrd.end());//   and randomly permute them
+			rand_shuffle(maxOrd.begin(), maxOrd.end());
 			size_t i = 0;
 			for (size_t j = 0; j < sumOrd.size(); ++j) order[i++] = sumOrd[j];
 			for (size_t j = 0; j < maxOrd.size(); ++j) order[i++] = maxOrd[j];
@@ -1348,7 +1348,7 @@ public:
 		if (ord_type == OrderMethod::Random) {	// random orders are treated here
 			for (size_t i = 0; i < nvar(); i++)
 				order[i] = var(i).label();	//   build a list of all the variables
-			std::random_shuffle(order.begin(), order.end());//   and randomly permute them
+			rand_shuffle(order.begin(), order.end());//   and randomly permute them
 			// !!! what scoring mechanism to use?
 			//std::pair<size_t,size_t> newsize = pseudoTreeSize(order);
 			//if (newsize.first < width || (newsize.first == width && newsize.second < height)) {
@@ -1678,7 +1678,7 @@ protected:
 		order.resize(nvar());
 		for (size_t i = 0; i < nvar(); i++)
 			order[i] = var(i).label();		// build a list of all the variables
-		std::random_shuffle(order.begin(), order.end());// and randomly permute them
+		rand_shuffle(order.begin(), order.end());// and randomly permute them
 		return order;
 	}
 

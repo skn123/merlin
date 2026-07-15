@@ -123,11 +123,9 @@ public:
 		m_adj.resize(n);
 	};
 
-	///
-	/// \brief Destroys the graph.
-	///
-	~graph() {
-	};
+	// No user-declared destructor: the compiler-generated destructor, copy
+	// constructor, and copy assignment are all correct (member-wise) here.
+	// (Declaring an empty ~graph() would deprecate the implicit copy ops.)
 
 	///
 	/// \brief Add a node to the graph.

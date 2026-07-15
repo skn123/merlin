@@ -40,6 +40,7 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <iterator>
 
 namespace merlin {
 
@@ -139,6 +140,20 @@ inline int randi(int imax) {
 		return 0;
 	int guard = (int) (randu() * imax) + 1;
 	return (guard > imax) ? imax : guard;
+}
+// rand_shuffle randomly permutes [first, last) in place using the same
+// rand()-based source as randu() (so rand_seed() controls it). Replacement
+// for std::random_shuffle, which was deprecated in C++14 and removed in C++17.
+template<typename RandomIt>
+inline void rand_shuffle(RandomIt first, RandomIt last) {
+	typename std::iterator_traits<RandomIt>::difference_type n = last - first;
+	for (typename std::iterator_traits<RandomIt>::difference_type i = n - 1; i > 0; --i) {
+		// pick j uniformly in [0, i]
+		typename std::iterator_traits<RandomIt>::difference_type j =
+				(typename std::iterator_traits<RandomIt>::difference_type) (randu() * (i + 1));
+		if (j > i) j = i; // guard against randu() == 1.0
+		std::swap(first[i], first[j]);
+	}
 }
 // randi returns a random integer in 0..imax-1
 inline int randi2(int imax) {
