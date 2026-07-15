@@ -31,6 +31,8 @@
 #include "ao_search.h"
 #include "wmb.h"
 
+#include <unordered_map>
+
 namespace merlin {
 
 /**
@@ -247,8 +249,19 @@ protected:
 	bool m_caching;						///< Enable OR caching (phase 2)
 	bool m_debug;						///< Internal debugging flag
 
+	// OR caching: per variable, the context (ancestors whose assignment
+	// determines the sub-problem below the variable) and a table mapping the
+	// context configuration index to the solved sub-tree value.
+	std::vector<variable_set> m_cache_context;                   ///< context vars per variable
+	/// Per-variable cache: context configuration index -> (solved value, best
+	/// sub-assignment achieving it). The sub-assignment is stored so a cache
+	/// hit can also restore the MAP/MMAP configuration, not just the value.
+	typedef std::pair<double, std::vector<std::pair<vindex, size_t> > > cache_entry;
+	std::vector<std::unordered_map<size_t, cache_entry> > m_cache;
+
 	// Search statistics
 	size_t m_num_expansions;			///< Number of node expansions
+	size_t m_num_cache_hits;			///< Number of OR-cache hits
 };
 
 } // namespace merlin

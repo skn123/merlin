@@ -68,6 +68,8 @@ struct ao_node {
 	                                ///< are combined by max; false => SUM (combine by sum)
 	bool expanded;                  ///< Children have already been generated
 	bool solved;                    ///< The exact \c value of this sub-tree is known
+	bool exact;                     ///< The sub-tree was solved with NO incumbent-based pruning
+	                                ///< inside it, so \c value is the true optimum (cacheable)
 
 	ao_node* parent;                ///< Back-pointer (root has NULL)
 	std::vector<ao_node*> children; ///< OR: one AND child per domain value;
@@ -77,7 +79,7 @@ struct ao_node {
 	ao_node() :
 			type(AO_OR), var(0), val(0), label(1.0), heur(0.0), value(0.0),
 			priority(0.0), is_max_or(true), expanded(false), solved(false),
-			parent(NULL), num_children_pending(0) {
+			exact(true), parent(NULL), num_children_pending(0) {
 	}
 };
 

@@ -182,6 +182,55 @@ void aobb::init() {
 		m_anchored[anchor] |= f;
 	}
 
+	// Compute the OR cache context for each variable. The context of x is the
+	// set of ancestors of x (in the pseudo tree) that appear in the scope of
+	// some factor touching x's sub-tree (x or a descendant). Two OR nodes for x
+	// with the same context assignment have identical optimal sub-tree values,
+	// so the value can be cached and reused. (Used only when m_caching is on.)
+	m_cache_context.assign(n, variable_set());
+	if (m_caching) {
+		// depth of each variable and ancestor sets (via m_parents)
+		std::vector<variable_set> ancestors(n);
+		for (size_t oi = m_order.size(); oi-- > 0; ) {
+			// process from roots (end of order) down to leaves (start of order)
+			vindex v = m_order[oi];
+			vindex p = m_parents[v];
+			if (p != (vindex) -1) {
+				ancestors[v] = ancestors[p];
+				ancestors[v] |= m_gmo.var(p);
+			}
+		}
+		// union of factor scopes touching x's subtree, intersected with ancestors
+		// scope_union[x] accumulates scopes of factors anchored in x's subtree
+		std::vector<variable_set> scope_union(n);
+		for (size_t f = 0; f < m_gmo.num_factors(); ++f) {
+			const variable_set& sc = m_gmo.get_factor(f).vars();
+			if (sc.nvar() == 0) continue;
+			// the deepest (smallest-position) scope var is where the factor is
+			// anchored; add its scope to every ancestor-or-self along the path.
+			vindex deep = sc.begin()->label();
+			size_t best_pos = m_position[deep];
+			for (variable_set::const_iterator vi = sc.begin(); vi != sc.end(); ++vi) {
+				if (m_position[vi->label()] <= best_pos) {
+					best_pos = m_position[vi->label()];
+					deep = vi->label();
+				}
+			}
+			scope_union[deep] |= sc;
+		}
+		// propagate scope unions up the tree (child contributes to its parent)
+		for (size_t oi = 0; oi < m_order.size(); ++oi) {
+			vindex v = m_order[oi];
+			vindex p = m_parents[v];
+			if (p != (vindex) -1)
+				scope_union[p] |= scope_union[v];
+		}
+		// context = (scopes touching subtree) intersect (strict ancestors)
+		for (size_t v = 0; v < n; ++v) {
+			m_cache_context[v] = scope_union[v] & ancestors[v];
+		}
+	}
+
 	// Build and run the WMB heuristic on the SAME order + pseudo tree so its
 	// bucket structure matches the AND/OR search tree.
 	m_heuristic = wmb(m_gmo);
@@ -208,6 +257,12 @@ void aobb::init() {
 	m_lb_linear = 0.0;
 	m_best_config.assign(n, 0);
 	m_num_expansions = 0;
+	m_num_cache_hits = 0;
+
+	// OR value cache (one table per variable).
+	m_cache.clear();
+	if (m_caching)
+		m_cache.resize(n);
 }
 
 void aobb::run() {
@@ -265,6 +320,25 @@ void aobb::run() {
 				vindex x = node->var;
 				size_t dom = m_gmo.var(x).states();
 
+				// OR caching: if the sub-problem below x for the current context
+				// assignment has been solved before, reuse the stored value and
+				// best sub-assignment instead of re-searching.
+				if (m_caching && m_cache_context[x].num_states() > 0) {
+					size_t key = sub2ind(m_cache_context[x], asgn);
+					std::unordered_map<size_t, cache_entry>::const_iterator hit =
+							m_cache[x].find(key);
+					if (hit != m_cache[x].end()) {
+						node->value = hit->second.first;
+						node->solved = true;
+						node->num_children_pending = 0;
+						best_sub[node] = hit->second.second;
+						node->children.clear();
+						++m_num_cache_hits;
+						// fall through to aggregation/propagation (pending == 0)
+						continue; // re-visit: expanded && solved => propagate
+					}
+				}
+
 				// Compute per-value heuristics; prune the whole OR node if it
 				// cannot possibly improve the incumbent.
 				node->heur = node->is_max_or ? 0.0 : 0.0;
@@ -286,8 +360,12 @@ void aobb::run() {
 				// Prune-check on this OR node.
 				if (path_bound(node) <= m_lb_linear) {
 					// Cannot improve: mark solved with value 0 and propagate.
+					// The value is NOT the true sub-tree optimum, so mark the
+					// node inexact (it must not be cached, and its ancestors
+					// become inexact too).
 					node->value = 0.0;
 					node->solved = true;
+					node->exact = false;
 					node->num_children_pending = 0;
 					best_sub[node].clear();
 					node->children.clear();
@@ -318,6 +396,7 @@ void aobb::run() {
 				if (path_bound(node) <= m_lb_linear) {
 					node->value = 0.0;
 					node->solved = true;
+					node->exact = false; // pruned: value is not the true optimum
 					node->num_children_pending = 0;
 					best_sub[node].clear();
 					best_sub[node].push_back(std::make_pair(x, node->val));
@@ -363,6 +442,13 @@ void aobb::run() {
 		stk.pop();
 
 		if (!node->children.empty()) {
+			// A node is exact only if every child sub-tree was solved exactly
+			// (no incumbent-based pruning anywhere inside it).
+			bool all_exact = true;
+			for (size_t i = 0; i < node->children.size(); ++i)
+				if (!node->children[i]->exact) { all_exact = false; break; }
+			node->exact = all_exact;
+
 			if (node->type == AO_AND) {
 				double val = node->label;
 				std::vector<std::pair<vindex, size_t> > sub;
@@ -404,6 +490,17 @@ void aobb::run() {
 				best_sub[node] = sub;
 				for (size_t i = 0; i < node->children.size(); ++i)
 					best_sub.erase(node->children[i]);
+
+				// OR caching: store the sub-tree value and its best sub-assignment,
+				// keyed by the context configuration -- but ONLY if the sub-tree
+				// was solved exactly (no incumbent-based pruning inside it). A
+				// pruned sub-tree's value can be understated, so caching it would
+				// be unsound; such nodes are left out of the cache.
+				if (m_caching && node->exact
+						&& m_cache_context[node->var].num_states() > 0) {
+					size_t key = sub2ind(m_cache_context[node->var], asgn);
+					m_cache[node->var][key] = std::make_pair(node->value, best_sub[node]);
+				}
 			}
 		}
 		node->solved = true; // value is now final (aggregated or solved in place)
@@ -445,6 +542,8 @@ void aobb::run() {
 
 	std::cout << "[AOBB] Finished searching in "
 			<< (timeSystem() - m_start_time) << " seconds" << std::endl;
+	if (m_caching)
+		std::cout << "[AOBB] + cache hits       : " << m_num_cache_hits << std::endl;
 	std::cout << "[AOBB] Optimal value      : " << m_logz << " ("
 			<< std::exp(m_logz) << ")" << std::endl;
 }
