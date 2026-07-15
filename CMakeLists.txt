@@ -1,5 +1,7 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.14)
 project(merlin VERSION 0.1.0)
+
+option(MERLIN_BUILD_TESTS "Build the Merlin test suite" ON)
 
 include(CTest)
 enable_testing()
@@ -56,3 +58,7 @@ target_link_libraries(${PROJECT_NAME} ${LINK_LIBS} ${LINK_LIBS})
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
+
+if(MERLIN_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
