@@ -322,16 +322,6 @@ void wmb::init() {
 	if (m_order.size() == 0) { // if we need to construct an elimination ordering
 		//m_order = m_gmo.order(m_order_method, m_var_types);
 		m_order = m_gmo.order2(m_order_method, m_var_types);
-//			variable_order_t ord;
-//			size_t min_w = 1000000;
-//			for (size_t i = 1; i <= m_order_iter; ++i) {
-//				ord = m_gmo.order2(m_order_method, m_var_types);
-//				size_t w = m_gmo.induced_width(ord);
-//				if (w < min_w) {
-//					m_order = ord;
-//					min_w = w;
-//				}
-//			}
 		m_parents.clear(); // (new elim order => need new pseudotree)
 		std::copy(m_order.begin(), m_order.end(),
 			std::ostream_iterator<size_t>(std::cout, " "));
