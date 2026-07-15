@@ -114,7 +114,7 @@ public:
 	///
 	/// \brief Properties of the algorithm.
 	///
-	MER_ENUM( Property , iBound,Order,Iter,Task,Debug,OrderIter,Cache,TimeLimit );
+	MER_ENUM( Property , iBound,Order,Iter,Task,Debug,OrderIter,Cache,TimeLimit,RotateLimit );
 
 public:
 	// Setters:
@@ -215,6 +215,13 @@ public:
 
 protected:
 	// Helpers:
+
+	///
+	/// \brief Name of the algorithm, used in the solution output. Overridden by
+	///        subclasses (e.g. braobb) so the reused write_solution reports the
+	///        right label.
+	///
+	virtual const char* algo_name() const { return "aobb"; }
 
 	///
 	/// \brief Recursively free an AND/OR sub-tree.

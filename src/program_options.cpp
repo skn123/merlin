@@ -45,10 +45,11 @@ ProgramOptions* parseCommandLine(int argc, char** argv) {
 			("virtual-evidence-file,V", po::value<std::string>(), "path to virtual evidence file (optional)")
 			("output-file,o", po::value<std::string>(), "path to output file (optional)")
 			("dataset-file,d", po::value<std::string>(), "path to dataset file (optional)")
-			("algorithm,a", po::value<std::string>(), "inference algorithm (required): bte, cte, wmb, ijgp, lbp, jglp, gibbs")
+			("algorithm,a", po::value<std::string>(), "inference algorithm (required): bte, cte, wmb, ijgp, lbp, jglp, gibbs, aobb, braobb")
 			("task,t", po::value<std::string>(), "inference task (use PR, MAR, MAP, MMAP)")
 			("ibound,i", po::value<int>(), "mini-bucket i-bound")
 			("time-limit,l", po::value<int>(), "time limit in seconds")
+			("rotate-limit,r", po::value<int>(), "BRAOBB nodes per subproblem before rotating (default 1000)")
 			("seed,s", po::value<int>(), "seed for the random number generator")
 			("verbose,v", po::value<int>(), "specify verbosity level")
 			("debug,d", "enable debug mode")
@@ -159,6 +160,8 @@ ProgramOptions* parseCommandLine(int argc, char** argv) {
 				opt->algorithm = MERLIN_ALGO_LBP;
 			} else if (alg.compare("aobb") == 0) {
 				opt->algorithm = MERLIN_ALGO_AOBB;
+			} else if (alg.compare("braobb") == 0) {
+				opt->algorithm = MERLIN_ALGO_BRAOBB;
 			} else if (alg.compare("aobf") == 0) {
 				opt->algorithm = MERLIN_ALGO_AOBF;
 			} else if (alg.compare("rbfaoo") == 0) {
@@ -180,6 +183,11 @@ ProgramOptions* parseCommandLine(int argc, char** argv) {
 		// parse the time limit
 		if (vm.count("time-limit")) {
 			opt->timeLimit = vm["time-limit"].as<int>();
+		}
+
+		// parse the BRAOBB rotation limit
+		if (vm.count("rotate-limit")) {
+			opt->rotateLimit = (size_t) vm["rotate-limit"].as<int>();
 		}
 
 		// parse the random generator seed

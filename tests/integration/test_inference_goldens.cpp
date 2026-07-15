@@ -326,3 +326,94 @@ TEST(Integration, CancerMAPAobbTimeLimitStillOptimal) {
     EXPECT_NE(produced.find("\"value\" : -2.617844"), std::string::npos)
         << produced;
 }
+
+// ---- BRAOBB (breadth-rotating AND/OR BnB) MAP / MMAP -----------------------
+//
+// BRAOBB explores the same search space as AOBB and is exact, so it must return
+// the same optima (verified against brute force in the AOBB tests): cancer MAP
+// -> 1 0 1 0 0 and simple5 MMAP (query 0 1 2) -> 1 1 0. The result must also be
+// invariant to the rotation limit (only exploration order / anytime quality
+// changes).
+
+TEST(Integration, CancerMAPBraobbIsExact) {
+    const std::string out_base = tmp_path("cancer_map_braobb");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("cancer.uai"));
+    eng.set_evidence_file(data_path("cancer.evid"));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(MERLIN_ALGO_BRAOBB);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MAP");
+    ASSERT_FALSE(produced.empty()) << "no MAP output produced";
+    std::istringstream is(produced);
+    std::string tok; size_t count = 0; std::vector<size_t> cfg;
+    while (is >> tok)
+        if (tok == "MAP") { is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); } }
+    ASSERT_EQ(count, 5u);
+    const size_t expected[5] = {1, 0, 1, 0, 0};
+    for (size_t i = 0; i < 5; ++i) EXPECT_EQ(cfg[i], expected[i]) << "variable " << i;
+}
+
+TEST(Integration, Simple5MMAPBraobbIsExact) {
+    const std::string out_base = tmp_path("simple5_mmap_braobb");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("simple5.uai"));
+    eng.set_query_file(data_path("simple5.map"));
+    eng.set_task(MERLIN_TASK_MMAP);
+    eng.set_algorithm(MERLIN_ALGO_BRAOBB);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MMAP");
+    ASSERT_FALSE(produced.empty()) << "no MMAP output produced";
+    std::istringstream is(produced);
+    std::string tok; size_t count = 0; std::vector<size_t> cfg;
+    while (is >> tok)
+        if (tok == "MMAP") { is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); } }
+    ASSERT_EQ(count, 3u);
+    const size_t expected[3] = {1, 1, 0};
+    for (size_t i = 0; i < 3; ++i) EXPECT_EQ(cfg[i], expected[i]) << "query variable " << i;
+}
+
+// The reported optimum must not depend on the rotation limit.
+TEST(Integration, Simple5MMAPBraobbRotationInvariant) {
+    const char* out1 = "simple5_mmap_br_r1";
+    const char* out2 = "simple5_mmap_br_r1000";
+
+    double vals[2];
+    const size_t rot[2] = {1, 1000};
+    for (int k = 0; k < 2; ++k) {
+        Merlin eng;
+        eng.set_use_files(true);
+        eng.set_model_file(data_path("simple5.uai"));
+        eng.set_query_file(data_path("simple5.map"));
+        eng.set_task(MERLIN_TASK_MMAP);
+        eng.set_algorithm(MERLIN_ALGO_BRAOBB);
+        eng.set_rotate_limit(rot[k]);
+        eng.set_output_format(MERLIN_OUTPUT_JSON);
+        eng.set_output_file(tmp_path(k == 0 ? out1 : out2));
+        ASSERT_TRUE(eng.init());
+        ASSERT_EQ(eng.run(), 0);
+        std::string produced = slurp(tmp_path(k == 0 ? out1 : out2) + ".MMAP.json");
+        // Parse the "value" field.
+        size_t p = produced.find("\"value\" : ");
+        ASSERT_NE(p, std::string::npos);
+        vals[k] = std::atof(produced.c_str() + p + 10);
+    }
+    EXPECT_NEAR(vals[0], vals[1], 1e-6);
+    EXPECT_NEAR(vals[0], 11.285626, 1e-4);
+}

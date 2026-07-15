@@ -71,6 +71,7 @@ protected:
 	double m_alpha;						///< Equivalent sample size
 	int m_initFactors;					///< Factor initialization method
 	double m_timeLimit;					///< Search time limit in seconds (<=0 = unlimited)
+	size_t m_rotateLimit;				///< BRAOBB rotation limit (nodes per subproblem; 0=none)
 
 private:
 	// Local members:
@@ -203,6 +204,17 @@ public:
 	/// \return The time limit in seconds.
 	///
 	double get_time_limit() const { return m_timeLimit; }
+
+	///
+	/// \brief Set the BRAOBB rotation limit (nodes per subproblem; 0 = none).
+	/// \param r	The rotation limit.
+	///
+	void set_rotate_limit(size_t r) { m_rotateLimit = r; }
+	///
+	/// \brief Get the BRAOBB rotation limit.
+	/// \return The rotation limit.
+	///
+	size_t get_rotate_limit() const { return m_rotateLimit; }
 
 	///
 	/// \brief Set the equivalent sample size.

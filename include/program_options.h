@@ -58,6 +58,7 @@ struct ProgramOptions {
 	double threshold;				///< Tolerance threshold value (default 1e-06)
 	double alpha;					///< Equivalent sample size (for Bayesian parameter estimation)
 	int initFactors;					///< Initialize the CPTs (for EM learning)
+	size_t rotateLimit;				///< BRAOBB nodes per subproblem before rotating (default 1000)
 
 public:
 
@@ -82,6 +83,7 @@ inline ProgramOptions::ProgramOptions() :
 		positive(false),
 		threshold(1e-6),
 		alpha(5.0),
-		initFactors(MERLIN_INIT_UNIFORM) {};
+		initFactors(MERLIN_INIT_UNIFORM),
+		rotateLimit(1000) {};
 
 #endif /* IBM_MERLIN_PROGRAM_OPTIONS_H_ */

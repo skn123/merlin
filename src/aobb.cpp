@@ -650,7 +650,7 @@ void aobb::write_solution(std::ostream& out, const std::map<size_t, size_t>& evi
 
 	if (output_format == MERLIN_OUTPUT_JSON) {
 		out << "{";
-		out << " \"algorithm\" : \"aobb\", ";
+		out << " \"algorithm\" : \"" << algo_name() << "\", ";
 		out << " \"ibound\" : " << m_ibound << ", ";
 		out << " \"iterations\" : " << m_num_iter << ", ";
 

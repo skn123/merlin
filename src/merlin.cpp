@@ -28,6 +28,7 @@
 #include "bte.h"
 #include "cte.h"
 #include "aobb.h"
+#include "braobb.h"
 #include "em.h"
 #include "util.h"
 
@@ -51,6 +52,7 @@ Merlin::Merlin() {
 	m_positive = false;
 	m_threshold = 1e-06;
 	m_timeLimit = 0.0; // 0 = unlimited
+	m_rotateLimit = 1000; // BRAOBB default
 }
 
 ///
@@ -719,15 +721,17 @@ void Merlin::check() {
 				m_algorithm != MERLIN_ALGO_IJGP &&
 				m_algorithm != MERLIN_ALGO_GIBBS &&
 				m_algorithm != MERLIN_ALGO_AOBB &&
+				m_algorithm != MERLIN_ALGO_BRAOBB &&
 				m_algorithm != MERLIN_ALGO_BTE) {
-			std::string err_msg("For MAP inference use WMB, JGLP, IJGP, GIBBS, AOBB and BTE algorithms.");
+			std::string err_msg("For MAP inference use WMB, JGLP, IJGP, GIBBS, AOBB, BRAOBB and BTE algorithms.");
 			throw std::runtime_error(err_msg);
 		}
 	} else if (m_task == MERLIN_TASK_MMAP) {
 		if (m_algorithm != MERLIN_ALGO_WMB &&
 			m_algorithm != MERLIN_ALGO_AOBB &&
+			m_algorithm != MERLIN_ALGO_BRAOBB &&
 			m_algorithm != MERLIN_ALGO_BTE) {
-			std::string err_msg("For MMAP inference use WMB, AOBB and BTE algorithms.");
+			std::string err_msg("For MMAP inference use WMB, AOBB, BRAOBB and BTE algorithms.");
 			throw std::runtime_error(err_msg);
 		}
 	} else if (m_task == MERLIN_TASK_EM) {
@@ -1109,6 +1113,27 @@ int Merlin::run() {
 				s.set_query(qvars);
 				s.run();
 				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_BRAOBB) {
+				merlin::braobb s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "RotateLimit=" << m_rotateLimit << ","
+					<< "Task=MAP";
+				s.set_properties(oss.str());
+				std::vector<vindex> qvars;
+				for (size_t i = 0; i < gm.nvar(); ++i) {
+					if (m_evidence.find(i) == m_evidence.end()) {
+						size_t nvar = old2new.at(i);
+						qvars.push_back(nvar); // use the new index of the MAP vars
+					}
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
 			}
 
 			out.close();
@@ -1170,6 +1195,26 @@ int Merlin::run() {
 					<< "OrderIter=100" << ","
 					<< "Iter=" << m_iterations << ","
 					<< "TimeLimit=" << m_timeLimit << ","
+					<< "Task=MMAP";
+				s.set_properties(oss.str());
+				std::vector<size_t> qvars;
+				for (size_t i = 0; i < m_query.size(); ++i) {
+					vindex var = m_query[i];
+					vindex nvar = old2new.at(var);
+					qvars.push_back(nvar); // use the new index of the MAP vars
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_BRAOBB) {
+				merlin::braobb s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "RotateLimit=" << m_rotateLimit << ","
 					<< "Task=MMAP";
 				s.set_properties(oss.str());
 				std::vector<size_t> qvars;
