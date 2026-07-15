@@ -17,7 +17,9 @@ cmake ..
 cmake --build .        # produces build/merlin
 ```
 
-**Python bindings** (`Makefile.pybind`, the sole remaining Makefile): requires `pybind11` installed in a conda env named `Pybind` (hardcoded in the Makefile). `make -f Makefile.pybind python_api` builds `merlin.*.so`, importable as `import merlin`. The pybind build first assembles a static `lib/libmerlin.a` from all sources *except* `src/merlin_pybind.cpp`, then links the binding against it. `make -f Makefile.pybind all` builds the CLI binary into `bin/merlin` instead. It is independent of the CMake build.
+**Python bindings** (`src/merlin_pybind.cpp`, opt-in CMake target): configure with `-DMERLIN_BUILD_PYTHON=ON`; pybind11 is fetched via `FetchContent` (see `python/CMakeLists.txt`), so no preinstalled env is needed. Builds `build/python/merlin.*.so`, importable as `import merlin` (add `build/python` to `PYTHONPATH`). The module exposes the `Merlin` class plus `Task`/`Algorithm`/`InputFormat`/`OutputFormat` IntEnums. `run()` writes the solution to `<output_file>.<TASK>` (there is no in-memory output string), so the Python workflow reads that file back — see the README example.
+
+**Docs** (Doxygen, opt-in CMake target): configure with `-DMERLIN_BUILD_DOCS=ON` then `cmake --build build --target docs` (requires Doxygen installed). `merlin.doxyfile` is the config; it scans `include`, `src`, and `README.md` (the mainpage) and writes HTML to `docs/html/`. Generated output under `docs/` is gitignored. Can also be run directly with `doxygen merlin.doxyfile`.
 
 **Tests** (GoogleTest, in `tests/`). The root CMake build enables them by default (`MERLIN_BUILD_TESTS=ON`) and fetches GoogleTest via `FetchContent` on first configure (needs network once). To build and run:
 ```
@@ -29,9 +31,9 @@ ctest --test-dir build --output-on-failure          # all tests (~0.4s)
 
 Two latent library quirks are documented (not worked around) by the tests: the `MapType&` overload of `ind2sub` (`variable_set.h`) is declared `void` but `return`s a value (rejected by strict compilers), and `MER_ENUM`'s string constructor only prefix-matches the first value and values right after a comma — later values are stored with a leading space (see `tests/unit/test_enum.cpp`).
 
-You can also verify changes by running the binary against instances in `data/`, e.g.:
+You can also verify changes by running the binary against instances in `examples/`, e.g.:
 ```
-./build/merlin --input-file data/pedigree1.uai --evidence-file data/pedigree1.evid \
+./build/merlin --input-file examples/pedigree1.uai --evidence-file examples/pedigree1.evid \
          --task MAR --algorithm wmb --ibound 4 --iterations 10 --output-format json
 ```
 Output is written to `<input>.<TASK>.out` (or a `--output-file`); the EM task writes a new model to `<input>.EM`. See README.md for the full CLI flag list and the UAI file formats (input/evidence/virtual-evidence/query/dataset/output) — these formats are the authoritative interface contract and the README documents them in detail.
@@ -52,5 +54,5 @@ Output is written to `<input>.<TASK>.out` (or a `--output-file`); the EM task wr
 
 - Library code lives in `namespace merlin`; the top-level `Merlin` facade and the `MERLIN_*` macros are global.
 - Header/source pairs: interface in `include/`, implementation in `src/`; several utility classes are header-only.
-- New source files must be added to the `add_executable(...)` list in `CMakeLists.txt` (and to `MERLIN_SOLVER_SRCS` in `tests/CMakeLists.txt` if they should be tested). `merlin_pybind.cpp` is deliberately excluded from the CMake target; `Makefile.pybind` globs `src/*.cpp` automatically for the Python binding.
+- New solver source files must be added to the shared `MERLIN_SOLVER_SRCS` list in `CMakeLists.txt` — one place feeds the `merlin` executable, the test targets (`tests/CMakeLists.txt`), and the Python module (`python/CMakeLists.txt`). `src/main.cpp` (CLI entry point) and `src/merlin_pybind.cpp` (Python module) are intentionally kept out of that list and added only to their respective targets.
 - `AOBB`, `AOBF`, `RBFAOO` algorithm codes exist but are **not implemented**.

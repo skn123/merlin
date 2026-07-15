@@ -13,23 +13,9 @@ FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
-# Solver sources compiled into each test target (everything under src/ except
-# the CLI entry point main.cpp and the pybind module). Listed explicitly to
-# match the style of the root CMakeLists.txt.
-set(MERLIN_SOLVER_SRCS
-    ${CMAKE_SOURCE_DIR}/src/bte.cpp
-    ${CMAKE_SOURCE_DIR}/src/cte.cpp
-    ${CMAKE_SOURCE_DIR}/src/em.cpp
-    ${CMAKE_SOURCE_DIR}/src/gibbs.cpp
-    ${CMAKE_SOURCE_DIR}/src/graph.cpp
-    ${CMAKE_SOURCE_DIR}/src/ijgp.cpp
-    ${CMAKE_SOURCE_DIR}/src/jglp.cpp
-    ${CMAKE_SOURCE_DIR}/src/lbp.cpp
-    ${CMAKE_SOURCE_DIR}/src/merlin.cpp
-    ${CMAKE_SOURCE_DIR}/src/program_options.cpp
-    ${CMAKE_SOURCE_DIR}/src/util.cpp
-    ${CMAKE_SOURCE_DIR}/src/wmb.cpp
-)
+# The solver sources compiled into each test target come from the shared
+# MERLIN_SOLVER_SRCS list defined in the root CMakeLists.txt (visible here via
+# add_subdirectory). It excludes main.cpp and the pybind module.
 
 set(MERLIN_TEST_LIBS
     GTest::gtest_main
@@ -53,7 +39,7 @@ add_executable(merlin_unit_tests
 )
 target_include_directories(merlin_unit_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_compile_definitions(merlin_unit_tests PRIVATE
-    MERLIN_DATA_DIR="${CMAKE_SOURCE_DIR}/data"
+    MERLIN_DATA_DIR="${CMAKE_SOURCE_DIR}/examples"
     MERLIN_ROOT_DIR="${CMAKE_SOURCE_DIR}"
 )
 target_link_libraries(merlin_unit_tests PRIVATE ${MERLIN_TEST_LIBS})
@@ -66,7 +52,7 @@ add_executable(merlin_integration_tests
 )
 target_include_directories(merlin_integration_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_compile_definitions(merlin_integration_tests PRIVATE
-    MERLIN_DATA_DIR="${CMAKE_SOURCE_DIR}/data"
+    MERLIN_DATA_DIR="${CMAKE_SOURCE_DIR}/examples"
     MERLIN_ROOT_DIR="${CMAKE_SOURCE_DIR}"
     MERLIN_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
     MERLIN_TEST_TMP_DIR="${CMAKE_CURRENT_BINARY_DIR}"

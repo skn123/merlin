@@ -1,5 +1,5 @@
 // Unit tests for merlin::graphical_model UAI parsing/serialization
-// (include/graphical_model.h), driven by the committed data/ fixtures.
+// (include/graphical_model.h), driven by the committed examples/ fixtures.
 
 #include <gtest/gtest.h>
 #include <algorithm>

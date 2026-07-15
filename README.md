@@ -121,12 +121,12 @@ values for the `t` parameter are:
 # Source Code
 
 The source code is organized along the following directory structure and
-is built with CMake (the Python API is built with `Makefile.pybind`).
+is built with CMake (including the optional Python API).
 
 - `src` - contains the source files
 - `include` - contains the header files
-- `data/` - contains several example graphical models
-- `doc/` - contains the documentation
+- `examples/` - contains several example graphical models
+- `docs/` - contains the generated documentation
 - `build/` - contains the intermediate build files
 - `bin/` - contains the compiled binary
 
@@ -179,20 +179,75 @@ build the solver without the tests, configure with `-DMERLIN_BUILD_TESTS=OFF`.
 
 ## Building the Python API
 
-To build the files necessary for accessing the library from Python, you must install `pybind11`.
-The `Makefile.pybind` assumes the existence of Python environment named `Pybind`, where `pybind11`
-is installed. Running `make -f Makefile.pybind python_api` will compile the library to `merlin.*.so`
-file, which can then be included in a Python script simply by `include merlin`.
+Merlin can be used directly from Python through a [pybind11](https://github.com/pybind/pybind11)
+binding, also built with CMake. It is an opt-in target: enable it with the
+`MERLIN_BUILD_PYTHON` option. pybind11 is fetched automatically at configure
+time (network access required on the first configure), so no separate install
+is needed — only a working `python3` (>= 3.7).
+
+```
+cmake -S . -B build -DMERLIN_BUILD_PYTHON=ON
+cmake --build build
+```
+
+This produces the extension module `merlin.*.so` in `build/python/`. To import
+it, add that directory to `PYTHONPATH` (or copy the `.so` next to your script):
+
+```
+export PYTHONPATH=build/python:$PYTHONPATH
+python3 -c "import merlin; print(merlin.Merlin)"
+```
+
+### Python usage example
+
+The `Merlin` engine is configured through properties and driven with `init()`
+and `run()`. As with the command line, `run()` writes the solution to a file
+named `<output_file>.<TASK>` (e.g. `cancer.MAR` for the MAR task). The tasks
+and algorithms are exposed as the `merlin.Task` and `merlin.Algorithm` enums.
+
+```python
+import merlin
+
+eng = merlin.Merlin()
+eng.use_files = True
+eng.model_file = "examples/cancer.uai"
+eng.evidence_file = "examples/cancer.evid"
+eng.task = merlin.Task.MAR            # PR, MAR, MAP, MMAP, EM
+eng.algorithm = merlin.Algorithm.CTE  # exact inference
+eng.output_file = "cancer"            # result written to cancer.MAR
+
+assert eng.init()                     # load model + evidence
+assert eng.run() == 0                 # 0 on success
+
+# Read back the posterior marginals (PR value + per-variable marginals).
+print(open("cancer.MAR").read())
+```
+
+Running this on `examples/cancer.uai` prints the partition function
+(`ln Pr(e) = -1.139434`) followed by the posterior marginals for each variable.
+See the *File Formats* section below for the output format.
 
 ## Building the Documentation
 
-Merlin uses Doxygen to build automatically the reference manual of the library,
-and supports both `html` and `latex` (see the corresponding `doc/html` and
-`doc/latex` subfolders).
+Merlin uses [Doxygen](https://www.doxygen.nl/) to generate the API reference
+manual (HTML) from the source comments. It is an opt-in CMake target enabled
+with the `MERLIN_BUILD_DOCS` option (Doxygen must be installed):
 
-To build the entire documentation, simply run `doxygen merlin.doxygen` in the
-main folder `merlin/`. To generate the pdf run `make all` in the
-`doc/latex` subfolder).
+```
+cmake -S . -B build -DMERLIN_BUILD_DOCS=ON
+cmake --build build --target docs
+```
+
+The generated documentation is written to `docs/html/`; open
+`docs/html/index.html` in a browser. The `docs` target is not part of the
+default build, so it only runs when requested.
+
+Alternatively, without CMake, run Doxygen directly against the config file in
+the repository root:
+
+```
+doxygen merlin.doxyfile
+```
 
 # Runnig the Solver
 
