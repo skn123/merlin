@@ -176,6 +176,11 @@ public:
 	///
 	const edge_id& add_edge(index i, index j) { // add edges (i,j) and (j,i) to adj
 		// std::cout<<"Add edge "<<i<<","<<j<<"\n";
+		// Grow the adjacency table if either endpoint is out of range, so an
+		// oversized node index cannot corrupt the heap (mirrors add_node()).
+		size_t need = std::max(i, j) + 1;
+		if (m_adj.size() < need)
+			m_adj.resize(need);
 		if (edge(i,j) != edge_id::NO_EDGE)
 			return edge(i,j);	// if exists already do nothing
 
