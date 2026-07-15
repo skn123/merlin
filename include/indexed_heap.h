@@ -127,6 +127,8 @@ public:
 	/// \param r 	The id to be removed
 	///
 	void erase(size_t r) {
+		if (r >= m_rev.size())
+			return;		// never inserted (id beyond the reverse map)
 		size_t I = m_rev[r];
 		if (I == 0)
 			return;		// already gone
