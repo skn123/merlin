@@ -369,23 +369,26 @@ the last variable in the scope as the `least significant`. To illustrate, we
 continue with our Markov network example from above, let's assume the following
 conditional probability tables:
 
-        X | P(X)
-        0 | 0.436
-        1 | 0.564
+| X | P(X) |
+|---|-------|
+| 0 | 0.436 |
+| 1 | 0.564 |
 
-        X   Y |  P(Y,X)
-        0   0 |  0.128
-        0   1 |  0.872
-        1   0 |  0.920
-        1   1 |  0.080
+| X | Y | P(Y,X) |
+|---|---|--------|
+| 0 | 0 | 0.128  |
+| 0 | 1 | 0.872  |
+| 1 | 0 | 0.920  |
+| 1 | 1 | 0.080  |
 
-        Y   Z |  P(Z,Y)
-        0   0 |  0.210
-        0   1 |  0.333
-        0   2 |  0.457
-        1   0 |  0.811
-        1   1 |  0.000
-        1   2 |  0.189
+| Y | Z | P(Z,Y) |
+|---|---|--------|
+| 0 | 0 | 0.210  |
+| 0 | 1 | 0.333  |
+| 0 | 2 | 0.457  |
+| 1 | 0 | 0.811  |
+| 1 | 1 | 0.000  |
+| 1 | 2 | 0.189  |
 
 Then we have the corresponding file content:
 
@@ -552,7 +555,7 @@ Merlin generates the output in the file `cancer.uai.EM`).
 Merlin supports a JSON format for the output file.
 
 ### Partition function `PR`
-
+```json
     {
         "algorithm" : "wmb",
         "ibound" : 2,
@@ -561,9 +564,10 @@ Merlin supports a JSON format for the output file.
         "value" : -2.551383,
         "status" : "true",
     }
+```
 
 ### Marginals `MAR`
-
+```json
     {
         "algorithm" : "lbp",
         "iterations" : 860,
@@ -583,12 +587,13 @@ Merlin supports a JSON format for the output file.
             }
         ]
     }
+```
 
 ### Maximum aposteriori `MAP`
 
 The solution contains all variables in the input graphical model (including
 the evidence variables)
-
+```json
     {
         "algorithm" : "jglp",
         "ibound" : 2,
@@ -607,11 +612,13 @@ the evidence variables)
             }
         ]
     }
+```
 
 ### Marginal MAP `MMAP`
 
 The solution contains only the query variables, indexed as in the input query file.
 
+```json
     {
         "algorithm" : "wmb",
         "ibound" : 2,
@@ -630,6 +637,7 @@ The solution contains only the query variables, indexed as in the input query fi
             }
         ]
     }
+```
 
 # Contact
 
