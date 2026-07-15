@@ -684,6 +684,39 @@ factor wmb::incoming(findex a) {
 	return bel;
 }
 
+double wmb::get_heuristic(vindex x, const std::vector<size_t>& config) {
+
+	// The mini-bucket clusters of variable x collectively summarize (an upper
+	// bound on) the sub-problem below x. For each cluster we take its belief,
+	// condition it on the already-assigned ancestor variables, and eliminate
+	// any remaining free variables by max (a valid upper bound). The product of
+	// the per-cluster bounds is the completion bound for x.
+	factor h(1.0);
+	const flist& cl = m_clusters[x];
+	for (flist::const_iterator it = cl.begin(); it != cl.end(); ++it) {
+		findex a = (*it);
+		factor bel = calc_belief(a);
+
+		// Condition on assigned ancestor variables in the belief's scope.
+		variable_set sc = bel.vars();
+		for (variable_set::const_iterator vi = sc.begin(); vi != sc.end(); ++vi) {
+			vindex v = vi->label();
+			if (v < config.size() && config[v] != (size_t) -1) {
+				bel = bel.condition(variable_set(*vi), config[v]);
+			}
+		}
+
+		// Eliminate any residual free variables by max (admissible upper bound).
+		if (bel.nvar() > 0) {
+			bel = bel.max(bel.vars());
+		}
+
+		h *= bel; // combine the mini-bucket parts (scalars => scalar product)
+	}
+
+	return h.max(); // scalar linear upper bound
+}
+
 void wmb::forward(double step) {
 
 	if (m_debug) {

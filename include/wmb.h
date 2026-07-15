@@ -351,6 +351,27 @@ public:
 	void init();
 
 	///
+	/// \brief Heuristic upper bound for a search algorithm (e.g. AOBB).
+	///
+	/// Given a variable \c x (an OR node in an AND/OR search) and a partial
+	/// assignment of the variables that are ancestors of \c x in the pseudo
+	/// tree, return an upper bound (in LINEAR space) on the optimal value
+	/// achievable by completing the sub-problem rooted at \c x. The bound is
+	/// derived from the weighted mini-bucket messages, so it is only valid
+	/// after run()/init() have populated the messages. Free (unassigned)
+	/// variables in the mini-bucket beliefs are eliminated by max, which keeps
+	/// the result an admissible (valid) upper bound for both MAP and SUM
+	/// variables.
+	///
+	/// \param x 		The bucket/OR variable (post-evidence index)
+	/// \param config 	Partial assignment indexed by variable id; entries for
+	///					the ancestors of \c x must be set, others are ignored
+	///					(use (size_t)-1 to mark an unassigned variable).
+	/// \return an upper bound (linear space) on the completion value.
+	///
+	double get_heuristic(vindex x, const std::vector<size_t>& config);
+
+	///
 	/// \brief Compute the belief of a cluster.
 	/// \param a 	The index of the cluster
 	/// \return the factor representing the belief of the cluster.

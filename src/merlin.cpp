@@ -27,6 +27,7 @@
 #include "wmb.h"
 #include "bte.h"
 #include "cte.h"
+#include "aobb.h"
 #include "em.h"
 #include "util.h"
 
@@ -716,14 +717,16 @@ void Merlin::check() {
 				m_algorithm != MERLIN_ALGO_JGLP &&
 				m_algorithm != MERLIN_ALGO_IJGP &&
 				m_algorithm != MERLIN_ALGO_GIBBS &&
+				m_algorithm != MERLIN_ALGO_AOBB &&
 				m_algorithm != MERLIN_ALGO_BTE) {
-			std::string err_msg("For MAP inference use WMB, JGLP, IJGP and GIBBS algorithms.");
+			std::string err_msg("For MAP inference use WMB, JGLP, IJGP, GIBBS, AOBB and BTE algorithms.");
 			throw std::runtime_error(err_msg);
 		}
 	} else if (m_task == MERLIN_TASK_MMAP) {
 		if (m_algorithm != MERLIN_ALGO_WMB &&
+			m_algorithm != MERLIN_ALGO_AOBB &&
 			m_algorithm != MERLIN_ALGO_BTE) {
-			std::string err_msg("For MMAP inference use WMB and BTE algorithms.");
+			std::string err_msg("For MMAP inference use WMB, AOBB and BTE algorithms.");
 			throw std::runtime_error(err_msg);
 		}
 	} else if (m_task == MERLIN_TASK_EM) {
@@ -1085,10 +1088,29 @@ int Merlin::run() {
 				s.set_query(qvars);
 				s.run();
 				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_AOBB) {
+				merlin::aobb s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "Task=MAP";
+				s.set_properties(oss.str());
+				std::vector<vindex> qvars;
+				for (size_t i = 0; i < gm.nvar(); ++i) {
+					if (m_evidence.find(i) == m_evidence.end()) {
+						size_t nvar = old2new.at(i);
+						qvars.push_back(nvar); // use the new index of the MAP vars
+					}
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
 			}
 
 			out.close();
-			// follow with search-based AOBB, AOBF, RBFAOO
+			// follow with search-based AOBF, RBFAOO
 		} else if ( m_task == MERLIN_TASK_MMAP ) { // MMAP inference
 
 			// Set the output format
@@ -1138,10 +1160,28 @@ int Merlin::run() {
 				s.set_query(qvars);
 				s.run();
 				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_AOBB) {
+				merlin::aobb s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "Task=MMAP";
+				s.set_properties(oss.str());
+				std::vector<size_t> qvars;
+				for (size_t i = 0; i < m_query.size(); ++i) {
+					vindex var = m_query[i];
+					vindex nvar = old2new.at(var);
+					qvars.push_back(nvar); // use the new index of the MAP vars
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
 			}
 
 			out.close();
-			// follow with search-based AOBB, AOBF, RBFAOO
+			// follow with search-based AOBF, RBFAOO
 		} else if ( m_task == MERLIN_TASK_EM ) { // EM parameter learning
 
 			merlin::em s(gm);

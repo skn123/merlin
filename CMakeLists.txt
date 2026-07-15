@@ -23,6 +23,7 @@ include_directories(include)
 # Python bindings (everything under src/ except the CLI entry point main.cpp
 # and the pybind module merlin_pybind.cpp).
 set(MERLIN_SOLVER_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/aobb.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bte.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cte.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/em.cpp
@@ -41,6 +42,8 @@ add_executable(merlin
     src/main.cpp
     ${MERLIN_SOLVER_SRCS}
     include/algorithm.h
+    include/ao_search.h
+    include/aobb.h
     include/base.h
     include/bte.h
     include/cte.h

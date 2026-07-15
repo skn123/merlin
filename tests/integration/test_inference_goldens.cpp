@@ -219,3 +219,81 @@ TEST(Integration, PaskinCTEMARDoesNotCrash) {
         EXPECT_NEAR(p0 + p1, 1.0, 1e-6) << "variable " << v;
     }
 }
+
+// ---- AOBB (exact AND/OR branch-and-bound) MAP / MMAP ------------------------
+//
+// AOBB is an exact optimizer, so its reported value must equal the true optimum
+// (verified here against values computed by brute force over the joint):
+//   cancer.uai MAP  (evidence var1=0): log value -2.617844, config 1 0 1 0 0
+//   simple5.uai MMAP (query 0 1 2)   : log value 11.285626, config 1 1 0
+
+TEST(Integration, CancerMAPAobbIsExact) {
+    const std::string out_base = tmp_path("cancer_map_aobb");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("cancer.uai"));
+    eng.set_evidence_file(data_path("cancer.evid"));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(MERLIN_ALGO_AOBB);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MAP");
+    ASSERT_FALSE(produced.empty()) << "no MAP output produced";
+
+    // Parse: token "MAP", then <count> followed by one value per variable.
+    std::istringstream is(produced);
+    std::string tok;
+    size_t count = 0;
+    std::vector<size_t> cfg;
+    while (is >> tok) {
+        if (tok == "MAP") {
+            is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); }
+        }
+    }
+    ASSERT_EQ(count, 5u);
+    ASSERT_EQ(cfg.size(), 5u);
+    const size_t expected[5] = {1, 0, 1, 0, 0};  // brute-force MAP config
+    for (size_t i = 0; i < 5; ++i)
+        EXPECT_EQ(cfg[i], expected[i]) << "variable " << i;
+}
+
+TEST(Integration, Simple5MMAPAobbIsExact) {
+    const std::string out_base = tmp_path("simple5_mmap_aobb");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("simple5.uai"));
+    eng.set_query_file(data_path("simple5.map"));
+    eng.set_task(MERLIN_TASK_MMAP);
+    eng.set_algorithm(MERLIN_ALGO_AOBB);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MMAP");
+    ASSERT_FALSE(produced.empty()) << "no MMAP output produced";
+
+    std::istringstream is(produced);
+    std::string tok;
+    size_t count = 0;
+    std::vector<size_t> cfg;
+    while (is >> tok) {
+        if (tok == "MMAP") {
+            is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); }
+        }
+    }
+    ASSERT_EQ(count, 3u);
+    ASSERT_EQ(cfg.size(), 3u);
+    const size_t expected[3] = {1, 1, 0};  // brute-force MMAP query config
+    for (size_t i = 0; i < 3; ++i)
+        EXPECT_EQ(cfg[i], expected[i]) << "query variable " << i;
+}
