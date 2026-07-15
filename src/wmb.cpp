@@ -357,8 +357,10 @@ void wmb::init() {
 		Orig[i] |= i;    					// included for the first time, and which newly
 	std::vector<flist> New(m_gmo.num_factors()); 	// created clusters feed into this cluster
 
-	// First downward pass to initialize the mini-bucket tree and backward messages
-	m_clusters.resize(m_order.size());
+	// First downward pass to initialize the mini-bucket tree and backward messages.
+	// m_clusters is indexed by variable label, which can exceed m_order.size()
+	// when the order omits variables (e.g. cardinality-1 vars), so size by nvar().
+	m_clusters.resize(m_gmo.nvar());
 	for (variable_order_t::const_iterator x = m_order.begin(); x != m_order.end(); ++x) {
 
 		//std::cout << "Eliminating "<<*x << (m_var_types[*x] ? "(MAP)\n" : "(SUM)\n");

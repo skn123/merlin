@@ -767,7 +767,11 @@ public:
 		size_t width = 0;
 		std::vector<variable_set> adj = mrf();
 		size_t n = order.size();
-		graph g(n); // create the graph
+		// The graph and the position map are indexed by variable LABEL, which
+		// can exceed order.size() when the order omits variables (e.g. models
+		// with cardinality-1 variables). Size both by nvar() to stay in bounds.
+		size_t nv = nvar();
+		graph g(nv); // create the graph
 		for (size_t i = 0; i < adj.size(); ++i) {
 			const variable_set& vi = adj[i];
 			for (variable_set::const_iterator cj = vi.begin();
@@ -777,9 +781,10 @@ public:
 			}
 		}
 
-		std::vector<size_t> position(n);
+		std::vector<size_t> position(nv, 0);
 		for (size_t i = 0; i < n; ++i) {
-			position[order[i]] = i;
+			if (order[i] < nv)
+				position[order[i]] = i;
 		}
 
 		// eliminate variables and create induced edges
