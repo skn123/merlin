@@ -27,6 +27,7 @@
 #define IBM_MERLIN_AO_SEARCH_H_
 
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 namespace merlin {
@@ -70,16 +71,32 @@ struct ao_node {
 	bool solved;                    ///< The exact \c value of this sub-tree is known
 	bool exact;                     ///< The sub-tree was solved with NO incumbent-based pruning
 	                                ///< inside it, so \c value is the true optimum (cacheable)
+	bool pruned;                    ///< The sub-tree was cut by branch-and-bound (value is a
+	                                ///< dead-end 0, not the true optimum)
 
 	ao_node* parent;                ///< Back-pointer (root has NULL)
 	std::vector<ao_node*> children; ///< OR: one AND child per domain value;
 	                                ///< AND: one OR child per pseudo-tree child variable
 	size_t num_children_pending;    ///< Number of children not yet solved
 
+	/// Best sub-assignment (variable -> value pairs) achieving \c value for the
+	/// sub-tree rooted at this node. Filled bottom-up by the bound propagator as
+	/// the sub-tree is solved, and read back to reconstruct the MAP/MMAP
+	/// configuration (or stored/restored via the OR cache). Kept on the node so
+	/// no side-map keyed by node pointer is needed.
+	std::vector<std::pair<size_t, size_t> > opt_assignment;
+
+	/// Per-value heuristic and label caches for an OR node, filled by
+	/// heuristic_or() and consumed by generate_children_or(). heur_cache[v] is
+	/// the child AND node's heuristic (label * WMB heuristic) for domain value v;
+	/// label_cache[v] is the product of factors instantiated at value v.
+	std::vector<double> heur_cache;
+	std::vector<double> label_cache;
+
 	ao_node() :
 			type(AO_OR), var(0), val(0), label(1.0), heur(0.0), value(0.0),
 			priority(0.0), is_max_or(true), expanded(false), solved(false),
-			exact(true), parent(NULL), num_children_pending(0) {
+			exact(true), pruned(false), parent(NULL), num_children_pending(0) {
 	}
 };
 

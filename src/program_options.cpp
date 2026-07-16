@@ -45,7 +45,7 @@ ProgramOptions* parseCommandLine(int argc, char** argv) {
 			("virtual-evidence-file,V", po::value<std::string>(), "path to virtual evidence file (optional)")
 			("output-file,o", po::value<std::string>(), "path to output file (optional)")
 			("dataset-file,d", po::value<std::string>(), "path to dataset file (optional)")
-			("algorithm,a", po::value<std::string>(), "inference algorithm (required): bte, cte, wmb, ijgp, lbp, jglp, gibbs, aobb, braobb")
+			("algorithm,a", po::value<std::string>(), "inference algorithm (required): bte, cte, wmb, ijgp, lbp, jglp, gibbs, aobb, braobb, aobf, rbfaoo, sls, gls+")
 			("task,t", po::value<std::string>(), "inference task (use PR, MAR, MAP, MMAP)")
 			("ibound,i", po::value<int>(), "mini-bucket i-bound")
 			("time-limit,l", po::value<int>(), "time limit in seconds")
@@ -166,6 +166,11 @@ ProgramOptions* parseCommandLine(int argc, char** argv) {
 				opt->algorithm = MERLIN_ALGO_AOBF;
 			} else if (alg.compare("rbfaoo") == 0) {
 				opt->algorithm = MERLIN_ALGO_RBFAOO;
+			} else if (alg.compare("sls") == 0) {
+				opt->algorithm = MERLIN_ALGO_SLS;
+			} else if (alg.compare("gls") == 0 || alg.compare("gls+") == 0
+					|| alg.compare("glsp") == 0) {
+				opt->algorithm = MERLIN_ALGO_GLS;
 			} else if (alg.compare("wmb") == 0) {
 				opt->algorithm = MERLIN_ALGO_WMB;
 			} else {

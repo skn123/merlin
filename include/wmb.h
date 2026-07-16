@@ -458,7 +458,24 @@ private:
 	std::vector<std::vector<variable_set> > m_separators; 	///< Separators between clusters
 	std::map<size_t, size_t> m_cluster2var;					///< Maps cluster id to a variable id
 
+	std::vector<double> m_bucket_norm;	///< Per-variable sum of log-normalization constants
+										///< stripped from that variable's forward messages during
+										///< the forward pass (folded into m_logz). Used to
+										///< reconstruct absolute per-node completion bounds.
+
 	bool m_debug;						///< Internal debugging flag
+
+public:
+	///
+	/// \brief Log of the normalization constant stripped from variable \c x's
+	///        forward messages during the forward pass. The absolute (un-
+	///        normalized) completion bound below \c x is obtained by multiplying
+	///        get_heuristic(x, config) by exp() of the sum of these values over
+	///        \c x and all of its pseudo-tree descendants. Valid after run().
+	///
+	inline double bucket_norm(vindex x) const {
+		return (x < m_bucket_norm.size()) ? m_bucket_norm[x] : 0.0;
+	}
 
 };
 

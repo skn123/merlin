@@ -25,8 +25,9 @@
 
 #include "braobb.h"
 
+#include <cmath>
+#include <limits>
 #include <queue>
-#include <map>
 #include <sstream>
 
 namespace merlin {
@@ -64,25 +65,10 @@ void braobb::run() {
 
 	// Dummy super-root AND node with one OR child per pseudo-tree root; solving
 	// it (product over roots) yields the global optimum, exactly as in aobb.
-	ao_node* super = new ao_node();
-	super->type = AO_AND;
-	super->label = 1.0;
-	super->value = 1.0;
-	super->parent = NULL;
-	for (size_t r = 0; r < m_roots.size(); ++r) {
-		ao_node* orr = new ao_node();
-		orr->type = AO_OR;
-		orr->var = m_roots[r];
-		orr->is_max_or = m_var_types[m_roots[r]];
-		orr->heur = m_heuristic.get_heuristic(m_roots[r], asgn); // asgn all-unset
-		orr->parent = super;
-		super->children.push_back(orr);
-	}
-	super->num_children_pending = super->children.size();
-	super->expanded = true;
-
-	// Per-node best sub-assignment achieving node->value (side-map, as in aobb).
-	std::map<ao_node*, std::vector<std::pair<vindex, size_t> > > best_sub;
+	// Built via the shared init_search_space so the root OR nodes get their
+	// per-value heuristic/label caches seeded (needed by generate_children_or).
+	std::stack<ao_node*> seed_stk;
+	ao_node* super = init_search_space(seed_stk, asgn);
 
 	// Breadth-rotating frontier: a FIFO queue of subproblem stacks. Seed the
 	// root stack with the super-root (bottom) then its OR children (on top), so
@@ -96,15 +82,12 @@ void braobb::run() {
 	stacks.push(root_stack);
 	size_t rotate_count = 0;
 
-	// Seed an initial incumbent for MAP (see aobb).
-	if (m_task == Task::MAP) {
-		std::vector<size_t> empty(n, (size_t) -1);
-		update_incumbent(empty);
-	}
+	// No greedy incumbent seed: the incumbent cost (m_incumbent_cost) starts at
+	// +infinity and improves (lowers) only when the search solves a complete
+	// assignment (see aobb). All values are costs in negative-log space.
 
 	bool timed_out = false;
 	size_t steps = 0;
-	double last_incumbent_time = m_start_time;
 
 	// Reconstruct the partial assignment of a node's ancestors by walking the
 	// parent chain (AND nodes carry var=val). Under breadth-rotation there is no
@@ -164,122 +147,43 @@ void braobb::run() {
 		}
 
 		if (!node->expanded) {
-			// ---- First visit: expand the node (logic identical to aobb). ----
+			// ---- First visit: expand the node using the shared aobb helpers. ----
 			node->expanded = true;
 
-			if (node->type == AO_OR) {
-				vindex x = node->var;
-				size_t dom = m_gmo.var(x).states();
+			// do_process records the AND assignment (OR nodes: no-op).
+			do_process(node, asgn);
 
-				// OR-cache read.
-				bool cache_hit = false;
-				if (m_caching && m_cache_context[x].num_states() > 0) {
-					size_t key = sub2ind(m_cache_context[x], asgn);
-					std::unordered_map<size_t, cache_entry>::const_iterator hit =
-							m_cache[x].find(key);
-					if (hit != m_cache[x].end()) {
-						node->value = hit->second.first;
-						node->solved = true;
-						node->exact = true;
-						node->num_children_pending = 0;
-						best_sub[node] = hit->second.second;
-						++m_num_cache_hits;
-						cache_hit = true;
-					}
-				}
-
-				if (!cache_hit) {
-					node->heur = 0.0;
-					std::vector<double> child_heur(dom, 0.0);
-					std::vector<double> child_label(dom, 0.0);
-					for (size_t v = 0; v < dom; ++v) {
-						asgn[x] = v;
-						double lbl = label(x, asgn);
-						double h = (lbl == 0.0) ? 0.0 : m_heuristic.get_heuristic(x, asgn);
-						child_label[v] = lbl;
-						child_heur[v] = lbl * h;
-						if (node->is_max_or)
-							node->heur = std::max(node->heur, child_heur[v]);
-						else
-							node->heur += child_heur[v];
-					}
-					asgn[x] = (size_t) -1;
-
-					if (path_bound(node) <= m_lb_linear) {
-						node->value = 0.0;
-						node->solved = true;
-						node->exact = false;
-						node->num_children_pending = 0;
-						best_sub[node].clear();
-					} else {
-						// Generate AND children (one per domain value) on the same
-						// stack: an OR node is a single subproblem (no fork).
-						for (size_t v = 0; v < dom; ++v) {
-							ao_node* andc = new ao_node();
-							andc->type = AO_AND;
-							andc->var = x;
-							andc->val = v;
-							andc->label = child_label[v];
-							andc->heur = (child_label[v] == 0.0) ? 0.0
-									: (child_heur[v] / child_label[v]);
-							andc->parent = node;
-							node->children.push_back(andc);
-						}
-						node->num_children_pending = node->children.size();
-						for (size_t i = 0; i < node->children.size(); ++i)
-							st->push(node->children[i]);
-					}
+			// OR-cache read (solved-in-place on a hit).
+			if (do_caching(node, asgn)) {
+				// solved; fall through to aggregation/pop below.
+			} else if (do_pruning(node)) {
+				// bound cannot improve: solved-in-place dead end.
+			} else if (node->type == AO_OR) {
+				// Generate AND children (one per feasible value) on the SAME stack:
+				// an OR node is a single subproblem (no fork).
+				std::vector<ao_node*> chi;
+				if (!generate_children_or(node, chi, asgn)) {
+					// children[0] is the best-UB child; push reversed so it is on
+					// top and explored first.
+					for (size_t i = chi.size(); i-- > 0; )
+						st->push(chi[i]);
 				}
 			} else { // AO_AND
-				vindex x = node->var;
-				asgn[x] = node->val;
-
-				if (path_bound(node) <= m_lb_linear) {
-					node->value = 0.0;
-					node->solved = true;
-					node->exact = false;
-					node->num_children_pending = 0;
-					best_sub[node].clear();
-					best_sub[node].push_back(std::make_pair(x, node->val));
-				} else if (m_children[x].empty()) {
-					node->value = node->label;
-					node->solved = true;
-					node->num_children_pending = 0;
-					best_sub[node].clear();
-					best_sub[node].push_back(std::make_pair(x, node->val));
-					if (m_task == Task::MAP && m_time_limit > 0.0) {
-						double now = timeSystem();
-						if (now - last_incumbent_time >= 0.25) {
-							update_incumbent(asgn);
-							last_incumbent_time = now;
-						}
-					}
-				} else {
-					for (size_t i = 0; i < m_children[x].size(); ++i) {
-						vindex c = m_children[x][i];
-						ao_node* orc = new ao_node();
-						orc->type = AO_OR;
-						orc->var = c;
-						orc->is_max_or = m_var_types[c];
-						orc->heur = m_heuristic.get_heuristic(c, asgn);
-						orc->parent = node;
-						node->children.push_back(orc);
-					}
-					node->num_children_pending = node->children.size();
-
-					if (node->children.size() == 1) {
+				std::vector<ao_node*> chi;
+				if (!generate_children_and(node, chi, asgn)) {
+					if (chi.size() == 1) {
 						// No decomposition: stay on the same subproblem stack.
-						st->push(node->children[0]);
+						st->push(chi[0]);
 					} else {
 						// Decomposition: fork a new subproblem stack per child so
 						// the scheduler rotates breadth-first across the sibling
 						// subproblems (BRAOBB's anytime edge). The children are
 						// removed from this stack; this AND node stays on `st` and
 						// is aggregated once all forked children finish.
-						for (size_t i = 0; i < node->children.size(); ++i) {
+						for (size_t i = 0; i < chi.size(); ++i) {
 							stack_node* cs = new stack_node(st);
 							st->open_children++;
-							cs->push(node->children[i]);
+							cs->push(chi[i]);
 							stacks.push(cs);
 						}
 					}
@@ -296,55 +200,68 @@ void braobb::run() {
 		// ---- Second visit (or solved-in-place): aggregate this node, pop it. ----
 		if (!node->solved) {
 			// All children have been solved (they popped themselves before this
-			// node resurfaced). Aggregate their values, matching aobb exactly.
+			// node resurfaced). Aggregate their values into this node. The best
+			// sub-assignment is stored on the node (opt_assignment); children are
+			// freed here since braobb pops a parent only after its children solve.
 			bool all_exact = true;
 			for (size_t i = 0; i < node->children.size(); ++i)
 				if (!node->children[i]->exact) { all_exact = false; break; }
 			node->exact = all_exact;
 
+			const double INF = std::numeric_limits<double>::infinity();
 			if (node->type == AO_AND) {
+				// AND: cost = label cost + sum of children costs.
 				double val = node->label;
-				for (size_t i = 0; i < node->children.size(); ++i)
-					val *= node->children[i]->value;
-				node->value = val;
 				std::vector<std::pair<vindex, size_t> > psub;
-				psub.push_back(std::make_pair(node->var, node->val));
+				// Skip the dummy super-root (var == -1); it fixes no real variable.
+				if (node->var != (vindex) -1)
+					psub.push_back(std::make_pair((vindex) node->var, node->val));
 				for (size_t i = 0; i < node->children.size(); ++i) {
-					std::vector<std::pair<vindex, size_t> >& cs = best_sub[node->children[i]];
-					psub.insert(psub.end(), cs.begin(), cs.end());
+					ao_node* c = node->children[i];
+					val += c->value;
+					psub.insert(psub.end(), c->opt_assignment.begin(),
+							c->opt_assignment.end());
 				}
-				best_sub[node] = psub;
-			} else { // OR: max (query) / sum
-				double val = 0.0;
+				node->value = val;
+				node->opt_assignment.swap(psub);
+			} else if (node->is_max_or) { // OR over MAX var: cost = min child cost
+				double val = INF;
 				int arg = -1;
 				for (size_t i = 0; i < node->children.size(); ++i) {
 					double cv = node->children[i]->value;
-					if (node->is_max_or) {
-						if (arg < 0 || cv > val) { val = cv; arg = (int) i; }
-					} else {
-						val += cv;
-					}
+					if (arg < 0 || cv < val) { val = cv; arg = (int) i; }
 				}
 				node->value = val;
-				std::vector<std::pair<vindex, size_t> > psub;
-				if (node->is_max_or && arg >= 0)
-					psub = best_sub[node->children[arg]];
-				best_sub[node] = psub;
-
-				// OR-cache write (exact subtrees only, matches aobb).
-				if (m_caching && node->exact
-						&& m_cache_context[node->var].num_states() > 0) {
-					size_t key = sub2ind(m_cache_context[node->var], asgn);
-					m_cache[node->var][key] = std::make_pair(node->value, best_sub[node]);
+				if (arg >= 0)
+					node->opt_assignment = node->children[arg]->opt_assignment;
+				else
+					node->opt_assignment.clear();
+			} else { // OR over SUM var: cost = -logsumexp(-child cost)
+				double mn = INF;
+				for (size_t i = 0; i < node->children.size(); ++i)
+					mn = std::min(mn, node->children[i]->value);
+				if (mn == INF) {
+					node->value = INF;
+				} else {
+					double s = 0.0;
+					for (size_t i = 0; i < node->children.size(); ++i)
+						s += std::exp(mn - node->children[i]->value);
+					node->value = mn - std::log(s);
 				}
+				node->opt_assignment.clear();
+			}
+			// OR-cache write (exact subtrees only, matches aobb).
+			if (node->type == AO_OR && m_caching && node->exact
+					&& m_cache_context[node->var].num_states() > 0) {
+				size_t key = sub2ind(m_cache_context[node->var], asgn);
+				m_cache[node->var][key] =
+						std::make_pair(node->value, node->opt_assignment);
 			}
 			node->solved = true;
 
 			// Free children (values aggregated into this node).
-			for (size_t i = 0; i < node->children.size(); ++i) {
-				best_sub.erase(node->children[i]);
+			for (size_t i = 0; i < node->children.size(); ++i)
 				delete node->children[i];
-			}
 			node->children.clear();
 		}
 
@@ -353,21 +270,20 @@ void braobb::run() {
 		ao_node* par = node->parent;
 		if (par == NULL) {
 			// Super-root solved: the optimum is proven. Branch-and-bound prunes
-			// any branch whose bound is <= the current incumbent (seeded/found
-			// by the greedy update_incumbent), so when that incumbent already
-			// equals the optimum the search short-circuits and node->value can
-			// be smaller. Adopt node->value only if it strictly improves on the
-			// incumbent; otherwise keep the incumbent's value and assignment.
-			if (node->value > m_lb_linear) {
-				m_lb_linear = node->value;
-				std::vector<std::pair<vindex, size_t> >& sub = best_sub[node];
+			// any branch whose cost bound is >= the current incumbent, so when that
+			// incumbent already equals the optimum the search short-circuits and
+			// node->value (cost) can be larger. Adopt node->value only if it
+			// strictly lowers the incumbent cost; else keep the incumbent.
+			if (node->value < m_incumbent_cost) {
+				m_incumbent_cost = node->value;
+				const std::vector<std::pair<vindex, size_t> >& sub =
+						node->opt_assignment;
 				for (size_t i = 0; i < sub.size(); ++i)
 					best_asgn[sub[i].first] = sub[i].second;
 				for (size_t i = 0; i < n; ++i) m_best_config[i] = best_asgn[i];
 			}
 			m_found_solution = true;
 			m_proved_optimal = true;
-			best_sub.erase(node);
 		} else if (par->num_children_pending > 0) {
 			par->num_children_pending--;
 		}
@@ -381,8 +297,8 @@ void braobb::run() {
 	while (!stacks.empty()) { delete stacks.front(); stacks.pop(); }
 
 	// Report the best value found (proven optimum if completed, else best
-	// anytime incumbent), in log space -- same as aobb.
-	m_logz = (m_lb_linear > 0.0) ? std::log(m_lb_linear)
+	// anytime incumbent), in log space (log-prob = -cost) -- same as aobb.
+	m_logz = m_found_solution ? -m_incumbent_cost
 			: -std::numeric_limits<double>::infinity();
 
 	std::cout << "[BRAOBB] Finished searching in "

@@ -417,3 +417,362 @@ TEST(Integration, Simple5MMAPBraobbRotationInvariant) {
     EXPECT_NEAR(vals[0], vals[1], 1e-6);
     EXPECT_NEAR(vals[0], 11.285626, 1e-4);
 }
+
+// ---- AOBF (best-first AND/OR search / AO*) MAP / MMAP ----------------------
+//
+// AOBF searches the context-minimal AND/OR graph guided by the WMB heuristic and
+// is exact, so it must return the same optima as AOBB / brute force: cancer MAP
+// -> 1 0 1 0 0, simple5 MMAP (query 0 1 2) -> 1 1 0. Crucially, correctness must
+// hold even when the WMB heuristic is APPROXIMATE (i-bound < treewidth): AOBF
+// reconstructs an absolute per-node completion bound from the normalized WMB
+// beliefs, so a small i-bound must not make it return a suboptimal answer.
+
+TEST(Integration, CancerMAPAobfIsExact) {
+    const std::string out_base = tmp_path("cancer_map_aobf");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("cancer.uai"));
+    eng.set_evidence_file(data_path("cancer.evid"));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(MERLIN_ALGO_AOBF);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MAP");
+    ASSERT_FALSE(produced.empty()) << "no MAP output produced";
+    std::istringstream is(produced);
+    std::string tok; size_t count = 0; std::vector<size_t> cfg;
+    while (is >> tok)
+        if (tok == "MAP") { is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); } }
+    ASSERT_EQ(count, 5u);
+    const size_t expected[5] = {1, 0, 1, 0, 0};
+    for (size_t i = 0; i < 5; ++i) EXPECT_EQ(cfg[i], expected[i]) << "variable " << i;
+}
+
+TEST(Integration, Simple5MMAPAobfIsExact) {
+    const std::string out_base = tmp_path("simple5_mmap_aobf");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("simple5.uai"));
+    eng.set_query_file(data_path("simple5.map"));
+    eng.set_task(MERLIN_TASK_MMAP);
+    eng.set_algorithm(MERLIN_ALGO_AOBF);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MMAP");
+    ASSERT_FALSE(produced.empty()) << "no MMAP output produced";
+    std::istringstream is(produced);
+    std::string tok; size_t count = 0; std::vector<size_t> cfg;
+    while (is >> tok)
+        if (tok == "MMAP") { is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); } }
+    ASSERT_EQ(count, 3u);
+    const size_t expected[3] = {1, 1, 0};
+    for (size_t i = 0; i < 3; ++i) EXPECT_EQ(cfg[i], expected[i]) << "query variable " << i;
+}
+
+// Regression: simple5 has treewidth 3, so i-bound 2 gives an APPROXIMATE WMB
+// heuristic. AOBF must still report the exact optimum (MAP value 10.982467),
+// exercising the absolute-bound reconstruction. (A naive port that used the raw
+// normalized WMB heuristic returned a suboptimal 7.18 here.)
+TEST(Integration, Simple5MAPAobfApproxHeuristicIsExact) {
+    const std::string out_base = tmp_path("simple5_map_aobf_ib2");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("simple5.uai"));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(MERLIN_ALGO_AOBF);
+    eng.set_ibound(2);                        // < treewidth => approximate heuristic
+    eng.set_output_format(MERLIN_OUTPUT_JSON);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MAP.json");
+    ASSERT_FALSE(produced.empty()) << "no MAP JSON output produced";
+    EXPECT_NE(produced.find("\"optimal\" : true"), std::string::npos) << produced;
+    size_t p = produced.find("\"value\" : ");
+    ASSERT_NE(p, std::string::npos);
+    double value = std::atof(produced.c_str() + p + 10);
+    EXPECT_NEAR(value, 10.982467, 1e-4) << produced;
+}
+
+// ---- RBFAOO (recursive best-first AND/OR search with overestimation) --------
+//
+// RBFAOO is a DFPN-style recursive best-first search over the context-minimal
+// AND/OR graph with a memory-bounded transposition table. It is exact, so it
+// must return the same optima as AOBB / AOBF / brute force: cancer MAP
+// -> 1 0 1 0 0, simple5 MMAP (query 0 1 2) -> 1 1 0. Like the other best-first
+// solver it reconstructs the optimum from the cache and needs the absolute-bound
+// WMB heuristic to stay optimal even at an approximate i-bound. The MMAP test
+// exercises the inline logsumexp SUM path.
+
+TEST(Integration, CancerMAPRbfaooIsExact) {
+    const std::string out_base = tmp_path("cancer_map_rbfaoo");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("cancer.uai"));
+    eng.set_evidence_file(data_path("cancer.evid"));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(MERLIN_ALGO_RBFAOO);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MAP");
+    ASSERT_FALSE(produced.empty()) << "no MAP output produced";
+    std::istringstream is(produced);
+    std::string tok; size_t count = 0; std::vector<size_t> cfg;
+    while (is >> tok)
+        if (tok == "MAP") { is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); } }
+    ASSERT_EQ(count, 5u);
+    const size_t expected[5] = {1, 0, 1, 0, 0};
+    for (size_t i = 0; i < 5; ++i) EXPECT_EQ(cfg[i], expected[i]) << "variable " << i;
+}
+
+TEST(Integration, Simple5MMAPRbfaooIsExact) {
+    const std::string out_base = tmp_path("simple5_mmap_rbfaoo");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("simple5.uai"));
+    eng.set_query_file(data_path("simple5.map"));
+    eng.set_task(MERLIN_TASK_MMAP);
+    eng.set_algorithm(MERLIN_ALGO_RBFAOO);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MMAP");
+    ASSERT_FALSE(produced.empty()) << "no MMAP output produced";
+    std::istringstream is(produced);
+    std::string tok; size_t count = 0; std::vector<size_t> cfg;
+    while (is >> tok)
+        if (tok == "MMAP") { is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); } }
+    ASSERT_EQ(count, 3u);
+    const size_t expected[3] = {1, 1, 0};
+    for (size_t i = 0; i < 3; ++i) EXPECT_EQ(cfg[i], expected[i]) << "query variable " << i;
+}
+
+// Regression: simple5 has treewidth 3, so i-bound 2 gives an APPROXIMATE WMB
+// heuristic. RBFAOO (best-first) must still report the exact optimum
+// (MAP value 10.982467), exercising the absolute-bound reconstruction.
+TEST(Integration, Simple5MAPRbfaooApproxHeuristicIsExact) {
+    const std::string out_base = tmp_path("simple5_map_rbfaoo_ib2");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("simple5.uai"));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(MERLIN_ALGO_RBFAOO);
+    eng.set_ibound(2);                        // < treewidth => approximate heuristic
+    eng.set_output_format(MERLIN_OUTPUT_JSON);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MAP.json");
+    ASSERT_FALSE(produced.empty()) << "no MAP JSON output produced";
+    EXPECT_NE(produced.find("\"optimal\" : true"), std::string::npos) << produced;
+    size_t p = produced.find("\"value\" : ");
+    ASSERT_NE(p, std::string::npos);
+    double value = std::atof(produced.c_str() + p + 10);
+    EXPECT_NEAR(value, 10.982467, 1e-4) << produced;
+}
+
+// ---- Zero-probability robustness (negative-log cost space) ------------------
+//
+// zeros.uai has hard-zero factor entries (deterministic constraints): only two
+// of its 16 configurations have positive probability, so most search paths are
+// +inf-cost dead ends. In negative-log cost space, mishandled +inf can produce
+// NaN (from inf-inf in logsumexp / threshold arithmetic) or hangs/crashes (dead
+// nodes never terminating). All four AND/OR solvers must return the exact
+// optimum without NaN, crash, or timeout. Brute-forced optima:
+//   MAP  -> log -0.867501, config [1,0,0,1]
+//   MMAP (query x0) -> log -0.867501, config [1]
+
+namespace {
+// Run a search algorithm on zeros.uai and return the JSON value; assert no NaN.
+double run_zeros(int task, int algorithm, const char* suffix, const char* tag) {
+    const std::string out_base = tmp_path((std::string("zeros_") + tag).c_str());
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("zeros.uai"));
+    if (task == MERLIN_TASK_MMAP) eng.set_query_file(data_path("zeros.map"));
+    eng.set_task(task);
+    eng.set_algorithm(algorithm);
+    eng.set_ibound(2);
+    eng.set_output_format(MERLIN_OUTPUT_JSON);
+    eng.set_output_file(out_base);
+    EXPECT_TRUE(eng.init());
+    EXPECT_EQ(eng.run(), 0);
+    std::string produced = slurp(out_base + suffix);
+    EXPECT_FALSE(produced.empty());
+    EXPECT_EQ(produced.find("nan"), std::string::npos) << "NaN in output: " << produced;
+    size_t p = produced.find("\"value\" : ");
+    EXPECT_NE(p, std::string::npos);
+    return std::atof(produced.c_str() + p + 10);
+}
+}  // namespace
+
+TEST(Integration, ZerosMAPAllSearchAlgosExact) {
+    EXPECT_NEAR(run_zeros(MERLIN_TASK_MAP, MERLIN_ALGO_AOBB,   ".MAP.json", "map_aobb"),   -0.867501, 1e-4);
+    EXPECT_NEAR(run_zeros(MERLIN_TASK_MAP, MERLIN_ALGO_BRAOBB, ".MAP.json", "map_braobb"), -0.867501, 1e-4);
+    EXPECT_NEAR(run_zeros(MERLIN_TASK_MAP, MERLIN_ALGO_AOBF,   ".MAP.json", "map_aobf"),   -0.867501, 1e-4);
+    EXPECT_NEAR(run_zeros(MERLIN_TASK_MAP, MERLIN_ALGO_RBFAOO, ".MAP.json", "map_rbfaoo"), -0.867501, 1e-4);
+}
+
+TEST(Integration, ZerosMMAPAllSearchAlgosExact) {
+    EXPECT_NEAR(run_zeros(MERLIN_TASK_MMAP, MERLIN_ALGO_AOBB,   ".MMAP.json", "mmap_aobb"),   -0.867501, 1e-4);
+    EXPECT_NEAR(run_zeros(MERLIN_TASK_MMAP, MERLIN_ALGO_BRAOBB, ".MMAP.json", "mmap_braobb"), -0.867501, 1e-4);
+    EXPECT_NEAR(run_zeros(MERLIN_TASK_MMAP, MERLIN_ALGO_AOBF,   ".MMAP.json", "mmap_aobf"),   -0.867501, 1e-4);
+    EXPECT_NEAR(run_zeros(MERLIN_TASK_MMAP, MERLIN_ALGO_RBFAOO, ".MMAP.json", "mmap_rbfaoo"), -0.867501, 1e-4);
+}
+
+// ---- SLS (G+StS) and GLS+ local search for MAP ------------------------------
+//
+// SLS and GLS+ are stochastic (never prove optimality), but on these small/medium
+// models they reliably reach the MAP optimum within a short time budget. Runs are
+// deterministic given a fixed seed, so the tests assert the exact optimum:
+//   cancer MAP (evidence) -> -2.617844, config [1,0,1,0,0]
+//   simple5 MAP           -> 10.982467
+//   zeros.uai MAP         -> -0.867501 (zero-probability robustness, no NaN)
+
+namespace {
+// Run a local-search algorithm on a model (with optional evidence) for a fixed
+// seed + time budget; return the JSON value and assert no NaN.
+double run_local_search(const char* model, const char* evid, int algorithm,
+        size_t seed, double time_limit, const char* tag) {
+    const std::string out_base = tmp_path((std::string("ls_") + tag).c_str());
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path(model));
+    if (evid) eng.set_evidence_file(data_path(evid));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(algorithm);
+    eng.set_seed(seed);
+    eng.set_time_limit(time_limit);
+    eng.set_output_format(MERLIN_OUTPUT_JSON);
+    eng.set_output_file(out_base);
+    EXPECT_TRUE(eng.init());
+    EXPECT_EQ(eng.run(), 0);
+    std::string produced = slurp(out_base + ".MAP.json");
+    EXPECT_FALSE(produced.empty());
+    EXPECT_EQ(produced.find("nan"), std::string::npos) << "NaN in output: " << produced;
+    size_t p = produced.find("\"value\" : ");
+    EXPECT_NE(p, std::string::npos);
+    return std::atof(produced.c_str() + p + 10);
+}
+}  // namespace
+
+TEST(Integration, CancerMAPSlsFindsOptimum) {
+    EXPECT_NEAR(run_local_search("cancer.uai", "cancer.evid", MERLIN_ALGO_SLS,
+            12345678, 2.0, "cancer_sls"), -2.617844, 1e-4);
+}
+TEST(Integration, CancerMAPGlsFindsOptimum) {
+    EXPECT_NEAR(run_local_search("cancer.uai", "cancer.evid", MERLIN_ALGO_GLS,
+            12345678, 2.0, "cancer_gls"), -2.617844, 1e-4);
+}
+TEST(Integration, Simple5MAPSlsFindsOptimum) {
+    EXPECT_NEAR(run_local_search("simple5.uai", NULL, MERLIN_ALGO_SLS,
+            12345678, 2.0, "simple5_sls"), 10.982467, 1e-4);
+}
+TEST(Integration, Simple5MAPGlsFindsOptimum) {
+    EXPECT_NEAR(run_local_search("simple5.uai", NULL, MERLIN_ALGO_GLS,
+            12345678, 2.0, "simple5_gls"), 10.982467, 1e-4);
+}
+// Zero-probability robustness: local search must handle log(0) entries (LOG_ZERO
+// clamp) and still find the feasible optimum, with no NaN in the output.
+TEST(Integration, ZerosMAPLocalSearchRobust) {
+    EXPECT_NEAR(run_local_search("zeros.uai", NULL, MERLIN_ALGO_SLS,
+            12345678, 2.0, "zeros_sls"), -0.867501, 1e-4);
+    EXPECT_NEAR(run_local_search("zeros.uai", NULL, MERLIN_ALGO_GLS,
+            12345678, 2.0, "zeros_gls"), -0.867501, 1e-4);
+}
+
+// ---- SLS / GLS+ for Marginal MAP (MMAP) -------------------------------------
+//
+// For MMAP the local search is over the MAP (query) variables only; a complete
+// MAP assignment is scored by the probability of evidence over the SUM variables,
+// estimated fast by the precompiled weighted mini-bucket heuristic (an upper
+// bound). The reported value is therefore a bound, but the argmax MAP assignment
+// is what matters: on these small models it reliably equals the exact MMAP
+// optimum found by the AND/OR solvers:
+//   simple5 MMAP (query 0 1 2) -> config [1,1,0]
+//   zeros.uai MMAP (query x0)  -> config [1]  (zero-probability robustness)
+
+namespace {
+// Run a local-search MMAP query and return the query-variable configuration from
+// the UAI output; assert no crash / empty output.
+std::vector<size_t> run_mmap_local_search(const char* model, const char* query,
+        int algorithm, size_t seed, double time_limit, size_t ibound,
+        const char* tag) {
+    const std::string out_base = tmp_path((std::string("mmap_ls_") + tag).c_str());
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path(model));
+    eng.set_query_file(data_path(query));
+    eng.set_task(MERLIN_TASK_MMAP);
+    eng.set_algorithm(algorithm);
+    eng.set_seed(seed);
+    eng.set_time_limit(time_limit);
+    eng.set_ibound(ibound);
+    eng.set_output_format(MERLIN_OUTPUT_UAI);
+    eng.set_output_file(out_base);
+    EXPECT_TRUE(eng.init());
+    EXPECT_EQ(eng.run(), 0);
+    std::string produced = slurp(out_base + ".MMAP");
+    EXPECT_FALSE(produced.empty());
+    std::istringstream is(produced);
+    std::string tok; size_t count = 0; std::vector<size_t> cfg;
+    while (is >> tok)
+        if (tok == "MMAP") { is >> count;
+            for (size_t i = 0; i < count; ++i) { size_t v; is >> v; cfg.push_back(v); } }
+    return cfg;
+}
+}  // namespace
+
+TEST(Integration, Simple5MMAPSlsFindsOptimum) {
+    std::vector<size_t> cfg = run_mmap_local_search("simple5.uai", "simple5.map",
+            MERLIN_ALGO_SLS, 12345678, 2.0, 10, "simple5_sls");
+    ASSERT_EQ(cfg.size(), 3u);
+    const size_t expected[3] = {1, 1, 0};
+    for (size_t i = 0; i < 3; ++i) EXPECT_EQ(cfg[i], expected[i]) << "query var " << i;
+}
+TEST(Integration, Simple5MMAPGlsFindsOptimum) {
+    std::vector<size_t> cfg = run_mmap_local_search("simple5.uai", "simple5.map",
+            MERLIN_ALGO_GLS, 12345678, 2.0, 10, "simple5_gls");
+    ASSERT_EQ(cfg.size(), 3u);
+    const size_t expected[3] = {1, 1, 0};
+    for (size_t i = 0; i < 3; ++i) EXPECT_EQ(cfg[i], expected[i]) << "query var " << i;
+}
+// Zero-probability SUM part: the WMB estimator + LOG_ZERO clamp must not crash or
+// produce NaN, and the search still finds the feasible MMAP optimum (x0 = 1).
+TEST(Integration, ZerosMMAPLocalSearchRobust) {
+    for (int alg : {MERLIN_ALGO_SLS, MERLIN_ALGO_GLS}) {
+        std::vector<size_t> cfg = run_mmap_local_search("zeros.uai", "zeros.map",
+                alg, 12345678, 2.0, 10, alg == MERLIN_ALGO_SLS ? "zeros_sls" : "zeros_gls");
+        ASSERT_EQ(cfg.size(), 1u);
+        EXPECT_EQ(cfg[0], 1u);
+    }
+}

@@ -83,6 +83,8 @@ PYBIND11_MODULE(merlin, m) {
     algorithm_members[py::str("AOBB")] = py::cast(MERLIN_ALGO_AOBB);
     algorithm_members[py::str("AOBF")] = py::cast(MERLIN_ALGO_AOBF);
     algorithm_members[py::str("RBFAOO")] = py::cast(MERLIN_ALGO_RBFAOO);
+    algorithm_members[py::str("SLS")] = py::cast(MERLIN_ALGO_SLS);
+    algorithm_members[py::str("GLS")] = py::cast(MERLIN_ALGO_GLS);
     algorithm_members[py::str("BTE")] = py::cast(MERLIN_ALGO_BTE);
     algorithm_members[py::str("CTE")] = py::cast(MERLIN_ALGO_CTE);
 
@@ -96,6 +98,8 @@ PYBIND11_MODULE(merlin, m) {
     AlgorithmClass.attr("AOBB").attr("__doc__") = "AND/OR Branch and Bound";
     AlgorithmClass.attr("AOBF").attr("__doc__") = "Best-First AND/OR Search";
     AlgorithmClass.attr("RBFAOO").attr("__doc__") = "Recursive Best-First AND/OR Search";
+    AlgorithmClass.attr("SLS").attr("__doc__") = "Stochastic Local Search (G+StS)";
+    AlgorithmClass.attr("GLS").attr("__doc__") = "Guided Local Search (GLS+)";
     AlgorithmClass.attr("BTE").attr("__doc__") = "Bucket-Tree Elimination";
     AlgorithmClass.attr("CTE").attr("__doc__") = "Clique-Tree Elimination";
     m.attr("Algorithm") = AlgorithmClass;

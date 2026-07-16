@@ -74,6 +74,7 @@ int main(int argc, char** argv) {
 	if (opt->timeLimit > 0)
 		eng.set_time_limit(opt->timeLimit);
 	eng.set_rotate_limit(opt->rotateLimit);
+	eng.set_seed(opt->seed);
 
 	// Run the inference
 	eng.init();

@@ -726,6 +726,10 @@ void wmb::forward(double step) {
 	}
 
 	m_logz = 0;
+	// Per-variable log-normalization accumulator (reset each forward pass), so
+	// callers can reconstruct absolute per-node completion bounds from the
+	// normalized beliefs returned by get_heuristic().
+	m_bucket_norm.assign(m_gmo.nvar(), 0.0);
 	for (variable_order_t::const_iterator x = m_order.begin(); x != m_order.end(); ++x) {
 
 		if (m_debug) {
@@ -756,6 +760,7 @@ void wmb::forward(double step) {
 				double mx = m_forward[ei].max();
 				m_forward[ei] /= mx;
 				m_logz += std::log(mx);
+				m_bucket_norm[*x] += std::log(mx); // attribute the stripped constant to x
 
 				if (m_debug) {
 					std::cout << "  forward msg (" << a << "," << b << "): elim = " << VX << " -> ";
@@ -774,11 +779,11 @@ void wmb::forward(double step) {
 		std::map<size_t, size_t>::iterator mi = m_cluster2var.find(*ci);
 		assert(mi != m_cluster2var.end());
 		size_t v = mi->second;
-		if (m_var_types[v] == false) { // SUM variable
-			F += log( bel.sum());
-		} else { // MAP variable
-			F += log( bel.max() );
-		}
+		double contrib = (m_var_types[v] == false) ? std::log(bel.sum())
+				: std::log(bel.max());
+		F += contrib;
+		if (v < m_bucket_norm.size())
+			m_bucket_norm[v] += contrib; // root residual belongs to the root variable
 	}
 
 	// Partition function or MAP/MMAP value

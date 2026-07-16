@@ -72,6 +72,7 @@ protected:
 	int m_initFactors;					///< Factor initialization method
 	double m_timeLimit;					///< Search time limit in seconds (<=0 = unlimited)
 	size_t m_rotateLimit;				///< BRAOBB rotation limit (nodes per subproblem; 0=none)
+	size_t m_seed;						///< RNG seed for stochastic algorithms (SLS/GLS+)
 
 private:
 	// Local members:
@@ -215,6 +216,17 @@ public:
 	/// \return The rotation limit.
 	///
 	size_t get_rotate_limit() const { return m_rotateLimit; }
+
+	///
+	/// \brief Set the RNG seed for stochastic algorithms (SLS/GLS+).
+	/// \param s	The random seed.
+	///
+	void set_seed(size_t s) { m_seed = s; }
+	///
+	/// \brief Get the RNG seed.
+	/// \return The random seed.
+	///
+	size_t get_seed() const { return m_seed; }
 
 	///
 	/// \brief Set the equivalent sample size.

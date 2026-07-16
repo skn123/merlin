@@ -24,7 +24,14 @@ include_directories(include)
 # and the pybind module merlin_pybind.cpp).
 set(MERLIN_SOLVER_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/aobb.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/aobf.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/braobb.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/rbfaoo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/rbfaoo_cache_table.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/hash_zobrist.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sls.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gls.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/bound_propagator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bte.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cte.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/em.cpp
@@ -45,7 +52,16 @@ add_executable(merlin
     include/algorithm.h
     include/ao_search.h
     include/aobb.h
+    include/aobf.h
+    include/aobf_search_node.h
+    include/aobf_search_space.h
     include/braobb.h
+    include/rbfaoo.h
+    include/rbfaoo_search_node.h
+    include/rbfaoo_cache_table.h
+    include/hash_zobrist.h
+    include/sls.h
+    include/gls.h
     include/base.h
     include/bte.h
     include/cte.h

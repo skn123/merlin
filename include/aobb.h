@@ -29,9 +29,12 @@
 #include "algorithm.h"
 #include "graphical_model.h"
 #include "ao_search.h"
+#include "bound_propagator.h"
 #include "wmb.h"
 
+#include <stack>
 #include <unordered_map>
+#include <vector>
 
 namespace merlin {
 
@@ -42,14 +45,19 @@ namespace merlin {
  *
  * AOBB is an exact depth-first branch-and-bound search over the AND/OR search
  * tree defined by a pseudo tree of the graphical model. It is guided by a
- * Weighted Mini-Bucket (WMB) heuristic that provides an upper bound on the
- * value of any partial assignment; sub-trees whose bound cannot improve the
+ * Weighted Mini-Bucket (WMB) heuristic that provides a lower bound on the COST
+ * of completing any partial assignment; sub-trees whose bound cannot improve the
  * current best (incumbent) solution are pruned. For MMAP the pseudo tree is
  * constrained so that the query (MAX) variables are eliminated last (i.e., they
  * sit at the top of the tree), which makes the outer maximization valid.
  *
- * The search is carried out in linear (probability) space and the optimal value
- * is reported in log space, consistent with WMB and JGLP.
+ * The search is carried out in negative-log COST space (\c -log(probability)):
+ * OR nodes over MAX variables take the min, AND nodes sum, OR nodes over SUM
+ * variables combine by -logsumexp, and the search minimizes the root cost. The
+ * WMB heuristic value (a linear-space upper bound on probability) is converted to
+ * an absolute per-node cost lower bound using a subtree-normalization offset
+ * (see m_subtree_norm), matching AOBF. The optimal value is reported in log
+ * space, consistent with WMB and JGLP.
  */
 class aobb: public graphical_model, public algorithm {
 public:
@@ -229,25 +237,99 @@ protected:
 	void free_subtree(ao_node* n);
 
 	///
-	/// \brief Product of the original factors that become fully instantiated
-	///        when \c var is assigned, given the current assignment (linear).
+	/// \brief Cost (\c -log of the product) of the original factors that become
+	///        fully instantiated when \c var is assigned, given the current
+	///        assignment. A zero-probability label yields +infinity.
 	///
 	double label(vindex var, const std::vector<size_t>& asgn) const;
 
 	///
-	/// \brief Complete a partial assignment greedily (best label*heuristic per
-	///        variable, in pseudo-tree order) and, if the resulting complete
-	///        assignment improves the incumbent, record it. Used to keep an
-	///        always-available best-so-far solution for the anytime/time-limit
-	///        mode. \c partial holds the fixed variables (>=0), others are -1.
-	///
-	void update_incumbent(const std::vector<size_t>& partial);
-
-	///
-	/// \brief Upper bound on the best complete solution consistent with the
-	///        partial path from the root down to \c n (linear). Used for pruning.
+	/// \brief Lower bound on the COST of the best complete solution consistent
+	///        with the partial path from the root down to \c n (negative-log
+	///        space). Used for pruning: prune when this bound >= incumbent cost.
 	///
 	double path_bound(ao_node* n) const;
+
+	// --- Decomposed search engine (mirrors the ground-truth AOBB structure) ---
+
+	///
+	/// \brief Build the dummy super-root AND node (one OR child per pseudo-tree
+	///        root) and seed the DFS stack. Returns the super-root.
+	///
+	ao_node* init_search_space(std::stack<ao_node*>& stk,
+			const std::vector<size_t>& asgn);
+
+	///
+	/// \brief Compute the per-value labels and heuristics of an OR node's AND
+	///        children, set the OR node's aggregate heuristic (max for a MAX
+	///        variable, sum for a SUM variable), and cache the per-value arrays on
+	///        the node for generate_children_or(). Returns the aggregate heur.
+	///
+	double heuristic_or(ao_node* orn, std::vector<size_t>& asgn);
+
+	///
+	/// \brief Initial processing of a node (record AND assignment). Returns false.
+	///
+	bool do_process(ao_node* n, std::vector<size_t>& asgn);
+
+	///
+	/// \brief OR-node cache read: on a hit, fill value/opt_assignment, mark the
+	///        node solved, and return true. Returns false otherwise.
+	///
+	bool do_caching(ao_node* n, std::vector<size_t>& asgn);
+
+	///
+	/// \brief Prune a node whose bound cannot improve the incumbent. On a prune,
+	///        mark it a solved-in-place dead end (value 0, inexact) and return
+	///        true. Returns false otherwise.
+	///
+	bool do_pruning(ao_node* n);
+
+	///
+	/// \brief True if \c n cannot improve the current incumbent (path_bound test).
+	///        SUM nodes are never pruned.
+	///
+	bool can_be_pruned(ao_node* n) const;
+
+	///
+	/// \brief Generate the AND children of an OR node (one per feasible domain
+	///        value), ordered by decreasing heuristic for MAX variables. Returns
+	///        true if the node has no children (dead end, solved in place).
+	///
+	bool generate_children_or(ao_node* n, std::vector<ao_node*>& chi,
+			std::vector<size_t>& asgn);
+
+	///
+	/// \brief Generate the OR children of an AND node (one per pseudo-tree child
+	///        variable), ordered by decreasing heuristic for MAX variables.
+	///        Returns true if the node has no children (leaf, solved in place).
+	///
+	bool generate_children_and(ao_node* n, std::vector<ao_node*>& chi,
+			std::vector<size_t>& asgn);
+
+	///
+	/// \brief Expand a node: generate its children and push them onto the stack.
+	///        Returns true if the node was solved in place (no children).
+	///
+	bool do_expand(ao_node* n, std::stack<ao_node*>& stk,
+			std::vector<size_t>& asgn);
+
+	///
+	/// \brief Solve exactly the AND/OR sub-problem rooted at \c var, conditioned
+	///        on the fixed ancestor values in \c asgn, using the standard AOBB
+	///        depth-first driver (do_process / do_caching / do_pruning / do_expand
+	///        + the shared bound_propagator). Returns the sub-problem's solved
+	///        value (cost, negative-log space). SUM variables are aggregated
+	///        inline by the propagator's logsumexp rule, exactly as in the main
+	///        search -- this is the shared code path other MMAP handling reuses.
+	///
+	/// \param var  the sub-problem root variable
+	/// \param asgn the current path assignment (ancestors set, others == -1);
+	///             it is left unchanged on return
+	/// \param caching whether to use the OR value cache during the sub-search
+	///
+	double solve_subproblem(vindex var, const std::vector<size_t>& asgn,
+			bool caching);
 
 	protected:
 	// Members:
@@ -260,7 +342,7 @@ protected:
 	size_t m_num_iter;					///< WMB tightening iterations
 	double m_logz;						///< log(best value found) => reported value
 	double m_ub;						///< Global upper bound from the heuristic (log)
-	double m_lb_linear;					///< Best complete-solution value (linear) = incumbent
+	double m_incumbent_cost;			///< Best complete-solution COST found so far (min; +inf if none)
 	variable_order_t m_order;			///< Constrained elimination order
 	std::vector<vindex> m_parents;		///< Pseudo tree (parent per variable)
 	std::vector<std::vector<vindex> > m_children;	///< Pseudo-tree children
@@ -270,6 +352,8 @@ protected:
 	std::vector<index> m_best_config;	///< Best assignment (by new/post-evidence index)
 	std::vector<flist> m_anchored;		///< Factors anchored at each variable (deepest scope var)
 	std::vector<size_t> m_position;		///< m_position[var] = rank in m_order
+	std::vector<double> m_subtree_norm;	///< per-var WMB bucket_norm summed over its pseudo-tree
+										///< subtree; offsets get_heuristic to an absolute cost bound
 	wmb m_heuristic;					///< The WMB heuristic engine
 	bool m_caching;						///< Enable OR caching (phase 2)
 	bool m_debug;						///< Internal debugging flag
@@ -284,7 +368,8 @@ protected:
 	/// Per-variable cache: context configuration index -> (solved value, best
 	/// sub-assignment achieving it). The sub-assignment is stored so a cache
 	/// hit can also restore the MAP/MMAP configuration, not just the value.
-	typedef std::pair<double, std::vector<std::pair<vindex, size_t> > > cache_entry;
+	/// Aliased to bound_propagator's type so the cache can be shared with it.
+	typedef bound_propagator::cache_entry cache_entry;
 	std::vector<std::unordered_map<size_t, cache_entry> > m_cache;
 
 	// Search statistics
