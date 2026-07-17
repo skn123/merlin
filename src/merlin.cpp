@@ -27,6 +27,12 @@
 #include "wmb.h"
 #include "bte.h"
 #include "cte.h"
+#include "aobb.h"
+#include "aobf.h"
+#include "braobb.h"
+#include "rbfaoo.h"
+#include "sls.h"
+#include "gls.h"
 #include "em.h"
 #include "util.h"
 
@@ -49,6 +55,12 @@ Merlin::Merlin() {
 	m_ioTime = 0;
 	m_positive = false;
 	m_threshold = 1e-06;
+	m_timeLimit = 0.0; // 0 = unlimited
+	m_rotateLimit = 1000; // BRAOBB default
+	m_seed = 12345678; // SLS/GLS+ RNG seed (deterministic by default)
+	m_lsSeed = true; // AOBB/BRAOBB: seed the incumbent with GLS+ (MAP only)
+	m_lsTimeLimit = 5.0; // GLS+ seed time budget (seconds)
+	m_lsMaxFlips = 0; // GLS+ seed flip budget (0 = time governs)
 }
 
 ///
@@ -716,14 +728,26 @@ void Merlin::check() {
 				m_algorithm != MERLIN_ALGO_JGLP &&
 				m_algorithm != MERLIN_ALGO_IJGP &&
 				m_algorithm != MERLIN_ALGO_GIBBS &&
+				m_algorithm != MERLIN_ALGO_AOBB &&
+				m_algorithm != MERLIN_ALGO_AOBF &&
+				m_algorithm != MERLIN_ALGO_RBFAOO &&
+				m_algorithm != MERLIN_ALGO_BRAOBB &&
+				m_algorithm != MERLIN_ALGO_SLS &&
+				m_algorithm != MERLIN_ALGO_GLS &&
 				m_algorithm != MERLIN_ALGO_BTE) {
-			std::string err_msg("For MAP inference use WMB, JGLP, IJGP and GIBBS algorithms.");
+			std::string err_msg("For MAP inference use WMB, JGLP, IJGP, GIBBS, AOBB, AOBF, RBFAOO, BRAOBB, SLS, GLS+ and BTE algorithms.");
 			throw std::runtime_error(err_msg);
 		}
 	} else if (m_task == MERLIN_TASK_MMAP) {
 		if (m_algorithm != MERLIN_ALGO_WMB &&
+			m_algorithm != MERLIN_ALGO_AOBB &&
+			m_algorithm != MERLIN_ALGO_AOBF &&
+			m_algorithm != MERLIN_ALGO_RBFAOO &&
+			m_algorithm != MERLIN_ALGO_BRAOBB &&
+			m_algorithm != MERLIN_ALGO_SLS &&
+			m_algorithm != MERLIN_ALGO_GLS &&
 			m_algorithm != MERLIN_ALGO_BTE) {
-			std::string err_msg("For MMAP inference use WMB and BTE algorithms.");
+			std::string err_msg("For MMAP inference use WMB, AOBB, AOBF, RBFAOO, BRAOBB, SLS, GLS+ and BTE algorithms.");
 			throw std::runtime_error(err_msg);
 		}
 	} else if (m_task == MERLIN_TASK_EM) {
@@ -1085,10 +1109,137 @@ int Merlin::run() {
 				s.set_query(qvars);
 				s.run();
 				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_AOBB) {
+				merlin::aobb s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "LsSeed=" << (m_lsSeed ? 1 : 0) << ","
+					<< "LsTimeLimit=" << m_lsTimeLimit << ","
+					<< "LsMaxFlips=" << m_lsMaxFlips << ","
+					<< "Seed=" << m_seed << ","
+					<< "Task=MAP";
+				s.set_properties(oss.str());
+				std::vector<vindex> qvars;
+				for (size_t i = 0; i < gm.nvar(); ++i) {
+					if (m_evidence.find(i) == m_evidence.end()) {
+						size_t nvar = old2new.at(i);
+						qvars.push_back(nvar); // use the new index of the MAP vars
+					}
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_BRAOBB) {
+				merlin::braobb s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "RotateLimit=" << m_rotateLimit << ","
+					<< "LsSeed=" << (m_lsSeed ? 1 : 0) << ","
+					<< "LsTimeLimit=" << m_lsTimeLimit << ","
+					<< "LsMaxFlips=" << m_lsMaxFlips << ","
+					<< "Seed=" << m_seed << ","
+					<< "Task=MAP";
+				s.set_properties(oss.str());
+				std::vector<vindex> qvars;
+				for (size_t i = 0; i < gm.nvar(); ++i) {
+					if (m_evidence.find(i) == m_evidence.end()) {
+						size_t nvar = old2new.at(i);
+						qvars.push_back(nvar); // use the new index of the MAP vars
+					}
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_AOBF) {
+				merlin::aobf s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "Task=MAP";
+				s.set_properties(oss.str());
+				std::vector<vindex> qvars;
+				for (size_t i = 0; i < gm.nvar(); ++i) {
+					if (m_evidence.find(i) == m_evidence.end()) {
+						size_t nvar = old2new.at(i);
+						qvars.push_back(nvar); // use the new index of the MAP vars
+					}
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_RBFAOO) {
+				merlin::rbfaoo s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "Task=MAP";
+				s.set_properties(oss.str());
+				std::vector<vindex> qvars;
+				for (size_t i = 0; i < gm.nvar(); ++i) {
+					if (m_evidence.find(i) == m_evidence.end()) {
+						size_t nvar = old2new.at(i);
+						qvars.push_back(nvar); // use the new index of the MAP vars
+					}
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_SLS) {
+				merlin::sls s(fs);
+				// Local search needs a positive wall-clock budget; default 10s.
+				double tl = (m_timeLimit > 0.0) ? m_timeLimit : 10.0;
+				std::ostringstream oss;
+				// Local search is time-bounded; Iter=0 => no flip budget, so the
+				// time limit governs. (m_iterations is the WMB-style iteration count
+				// and defaults to a small value unsuitable as a flip budget.)
+				oss << "Task=MAP" << ","
+					<< "TimeLimit=" << tl << ","
+					<< "Iter=0" << ","
+					<< "Seed=" << m_seed;
+				s.set_properties(oss.str());
+				std::vector<vindex> qvars;
+				for (size_t i = 0; i < gm.nvar(); ++i)
+					if (m_evidence.find(i) == m_evidence.end())
+						qvars.push_back(old2new.at(i));
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_GLS) {
+				merlin::gls s(fs);
+				double tl = (m_timeLimit > 0.0) ? m_timeLimit : 10.0;
+				std::ostringstream oss;
+				// Local search is time-bounded; Iter=0 => no flip budget, so the
+				// time limit governs. (m_iterations is the WMB-style iteration count
+				// and defaults to a small value unsuitable as a flip budget.)
+				oss << "Task=MAP" << ","
+					<< "TimeLimit=" << tl << ","
+					<< "Iter=0" << ","
+					<< "Seed=" << m_seed;
+				s.set_properties(oss.str());
+				std::vector<vindex> qvars;
+				for (size_t i = 0; i < gm.nvar(); ++i)
+					if (m_evidence.find(i) == m_evidence.end())
+						qvars.push_back(old2new.at(i));
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
 			}
 
 			out.close();
-			// follow with search-based AOBB, AOBF, RBFAOO
 		} else if ( m_task == MERLIN_TASK_MMAP ) { // MMAP inference
 
 			// Set the output format
@@ -1138,10 +1289,126 @@ int Merlin::run() {
 				s.set_query(qvars);
 				s.run();
 				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_AOBB) {
+				merlin::aobb s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "LsSeed=" << (m_lsSeed ? 1 : 0) << ","
+					<< "LsTimeLimit=" << m_lsTimeLimit << ","
+					<< "LsMaxFlips=" << m_lsMaxFlips << ","
+					<< "Seed=" << m_seed << ","
+					<< "Task=MMAP";
+				s.set_properties(oss.str());
+				std::vector<size_t> qvars;
+				for (size_t i = 0; i < m_query.size(); ++i) {
+					vindex var = m_query[i];
+					vindex nvar = old2new.at(var);
+					qvars.push_back(nvar); // use the new index of the MAP vars
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_BRAOBB) {
+				merlin::braobb s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "RotateLimit=" << m_rotateLimit << ","
+					<< "LsSeed=" << (m_lsSeed ? 1 : 0) << ","
+					<< "LsTimeLimit=" << m_lsTimeLimit << ","
+					<< "LsMaxFlips=" << m_lsMaxFlips << ","
+					<< "Seed=" << m_seed << ","
+					<< "Task=MMAP";
+				s.set_properties(oss.str());
+				std::vector<size_t> qvars;
+				for (size_t i = 0; i < m_query.size(); ++i) {
+					vindex var = m_query[i];
+					vindex nvar = old2new.at(var);
+					qvars.push_back(nvar); // use the new index of the MAP vars
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_AOBF) {
+				merlin::aobf s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "Task=MMAP";
+				s.set_properties(oss.str());
+				std::vector<size_t> qvars;
+				for (size_t i = 0; i < m_query.size(); ++i) {
+					vindex var = m_query[i];
+					vindex nvar = old2new.at(var);
+					qvars.push_back(nvar); // use the new index of the MAP vars
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_RBFAOO) {
+				merlin::rbfaoo s(fs);
+				std::ostringstream oss;
+				oss << "iBound=" << m_ibound << ","
+					<< "Order=MinFill" << ","
+					<< "OrderIter=100" << ","
+					<< "Iter=" << m_iterations << ","
+					<< "TimeLimit=" << m_timeLimit << ","
+					<< "Task=MMAP";
+				s.set_properties(oss.str());
+				std::vector<size_t> qvars;
+				for (size_t i = 0; i < m_query.size(); ++i) {
+					vindex var = m_query[i];
+					vindex nvar = old2new.at(var);
+					qvars.push_back(nvar); // use the new index of the MAP vars
+				}
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_SLS) {
+				merlin::sls s(fs);
+				double tl = (m_timeLimit > 0.0) ? m_timeLimit : 10.0;
+				std::ostringstream oss;
+				oss << "Task=MMAP" << ","
+					<< "TimeLimit=" << tl << ","
+					<< "Iter=0" << ","
+					<< "Seed=" << m_seed << ","
+					<< "iBound=" << m_ibound;
+				s.set_properties(oss.str());
+				std::vector<size_t> qvars;
+				for (size_t i = 0; i < m_query.size(); ++i)
+					qvars.push_back(old2new.at(m_query[i]));
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
+			} else if (m_algorithm == MERLIN_ALGO_GLS) {
+				merlin::gls s(fs);
+				double tl = (m_timeLimit > 0.0) ? m_timeLimit : 10.0;
+				std::ostringstream oss;
+				oss << "Task=MMAP" << ","
+					<< "TimeLimit=" << tl << ","
+					<< "Iter=0" << ","
+					<< "Seed=" << m_seed << ","
+					<< "iBound=" << m_ibound;
+				s.set_properties(oss.str());
+				std::vector<size_t> qvars;
+				for (size_t i = 0; i < m_query.size(); ++i)
+					qvars.push_back(old2new.at(m_query[i]));
+				s.set_query(qvars);
+				s.run();
+				s.write_solution(out, m_evidence, old2new, gm, dummies, m_outputFormat);
 			}
 
 			out.close();
-			// follow with search-based AOBB, AOBF, RBFAOO
 		} else if ( m_task == MERLIN_TASK_EM ) { // EM parameter learning
 
 			merlin::em s(gm);

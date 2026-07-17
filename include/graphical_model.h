@@ -767,7 +767,11 @@ public:
 		size_t width = 0;
 		std::vector<variable_set> adj = mrf();
 		size_t n = order.size();
-		graph g(n); // create the graph
+		// The graph and the position map are indexed by variable LABEL, which
+		// can exceed order.size() when the order omits variables (e.g. models
+		// with cardinality-1 variables). Size both by nvar() to stay in bounds.
+		size_t nv = nvar();
+		graph g(nv); // create the graph
 		for (size_t i = 0; i < adj.size(); ++i) {
 			const variable_set& vi = adj[i];
 			for (variable_set::const_iterator cj = vi.begin();
@@ -777,9 +781,10 @@ public:
 			}
 		}
 
-		std::vector<size_t> position(n);
+		std::vector<size_t> position(nv, 0);
 		for (size_t i = 0; i < n; ++i) {
-			position[order[i]] = i;
+			if (order[i] < nv)
+				position[order[i]] = i;
 		}
 
 		// eliminate variables and create induced edges
@@ -891,7 +896,7 @@ public:
 		if (ord_type == OrderMethod::Random) {	// random orders are treated here
 			for (size_t i = 0; i < nvar(); i++)
 				order[i] = var(i).label();	// build a list of all the variables
-			std::random_shuffle(order.begin(), order.end());// and randomly permute them
+			rand_shuffle(order.begin(), order.end());// and randomly permute them
 			return order;						    		// then return
 		}
 
@@ -950,7 +955,7 @@ public:
 			order.resize(nvar());
 			for (size_t i = 0; i < nvar(); i++)
 				order[i] = var(i).label();	//   build a list of all the variables
-			std::random_shuffle(order.begin(), order.end());//   and randomly permute them
+			rand_shuffle(order.begin(), order.end());//   and randomly permute them
 			return order;											//   then return
 		}
 
@@ -1176,9 +1181,17 @@ public:
 				else map_vars.erase(v);
 			}
 
-			// anything left to eliminate? If not, we are done!
+			// No non-simplicial candidate in the CURRENT set (SUM or MAP). If
+			// nodes still remain, the current set was just emptied (all of its
+			// remaining vars were simplicial) -- loop again so the next
+			// iteration switches to the other set (SUM -> MAP). Only stop once
+			// every node has been eliminated; otherwise MAP/query variables
+			// would be silently dropped from the order (producing an incomplete
+			// order and, downstream, wrong MMAP results / out-of-range access).
 			if (min_score == std::numeric_limits<int>::max()) {
-				break;
+				if (num_nodes == 0)
+					break;
+				continue;
 			}
 
 			// Pick one of the minimal score nodes (with score >= 1),
@@ -1263,8 +1276,8 @@ public:
 				else sumOrd.push_back(var(i).label());
 			}
 
-			std::random_shuffle(sumOrd.begin(), sumOrd.end());//   and randomly permute them
-			std::random_shuffle(maxOrd.begin(), maxOrd.end());
+			rand_shuffle(sumOrd.begin(), sumOrd.end());//   and randomly permute them
+			rand_shuffle(maxOrd.begin(), maxOrd.end());
 			size_t i = 0;
 			for (size_t j = 0; j < sumOrd.size(); ++j) order[i++] = sumOrd[j];
 			for (size_t j = 0; j < maxOrd.size(); ++j) order[i++] = maxOrd[j];
@@ -1348,7 +1361,7 @@ public:
 		if (ord_type == OrderMethod::Random) {	// random orders are treated here
 			for (size_t i = 0; i < nvar(); i++)
 				order[i] = var(i).label();	//   build a list of all the variables
-			std::random_shuffle(order.begin(), order.end());//   and randomly permute them
+			rand_shuffle(order.begin(), order.end());//   and randomly permute them
 			// !!! what scoring mechanism to use?
 			//std::pair<size_t,size_t> newsize = pseudoTreeSize(order);
 			//if (newsize.first < width || (newsize.first == width && newsize.second < height)) {
@@ -1678,7 +1691,7 @@ protected:
 		order.resize(nvar());
 		for (size_t i = 0; i < nvar(); i++)
 			order[i] = var(i).label();		// build a list of all the variables
-		std::random_shuffle(order.begin(), order.end());// and randomly permute them
+		rand_shuffle(order.begin(), order.end());// and randomly permute them
 		return order;
 	}
 

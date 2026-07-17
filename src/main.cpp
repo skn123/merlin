@@ -71,6 +71,17 @@ int main(int argc, char** argv) {
 	eng.set_threshold(opt->threshold);
 	eng.set_alpha(opt->alpha);
 	eng.set_init_factor_method(opt->initFactors);
+	if (opt->timeLimit > 0)
+		eng.set_time_limit(opt->timeLimit);
+	eng.set_rotate_limit(opt->rotateLimit);
+	eng.set_seed(opt->seed);
+	// GLS+ incumbent seed (AOBB/BRAOBB, MAP only); apply overrides only when given.
+	if (opt->lsSeedSet)
+		eng.set_ls_seed(opt->lsSeed);
+	if (opt->lsTimeLimitSet)
+		eng.set_ls_time_limit(opt->lsTimeLimit);
+	if (opt->lsMaxFlipsSet)
+		eng.set_ls_max_flips(opt->lsMaxFlips);
 
 	// Run the inference
 	eng.init();

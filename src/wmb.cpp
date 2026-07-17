@@ -322,16 +322,6 @@ void wmb::init() {
 	if (m_order.size() == 0) { // if we need to construct an elimination ordering
 		//m_order = m_gmo.order(m_order_method, m_var_types);
 		m_order = m_gmo.order2(m_order_method, m_var_types);
-//			variable_order_t ord;
-//			size_t min_w = 1000000;
-//			for (size_t i = 1; i <= m_order_iter; ++i) {
-//				ord = m_gmo.order2(m_order_method, m_var_types);
-//				size_t w = m_gmo.induced_width(ord);
-//				if (w < min_w) {
-//					m_order = ord;
-//					min_w = w;
-//				}
-//			}
 		m_parents.clear(); // (new elim order => need new pseudotree)
 		std::copy(m_order.begin(), m_order.end(),
 			std::ostream_iterator<size_t>(std::cout, " "));
@@ -367,8 +357,10 @@ void wmb::init() {
 		Orig[i] |= i;    					// included for the first time, and which newly
 	std::vector<flist> New(m_gmo.num_factors()); 	// created clusters feed into this cluster
 
-	// First downward pass to initialize the mini-bucket tree and backward messages
-	m_clusters.resize(m_order.size());
+	// First downward pass to initialize the mini-bucket tree and backward messages.
+	// m_clusters is indexed by variable label, which can exceed m_order.size()
+	// when the order omits variables (e.g. cardinality-1 vars), so size by nvar().
+	m_clusters.resize(m_gmo.nvar());
 	for (variable_order_t::const_iterator x = m_order.begin(); x != m_order.end(); ++x) {
 
 		//std::cout << "Eliminating "<<*x << (m_var_types[*x] ? "(MAP)\n" : "(SUM)\n");
@@ -694,6 +686,39 @@ factor wmb::incoming(findex a) {
 	return bel;
 }
 
+double wmb::get_heuristic(vindex x, const std::vector<size_t>& config) {
+
+	// The mini-bucket clusters of variable x collectively summarize (an upper
+	// bound on) the sub-problem below x. For each cluster we take its belief,
+	// condition it on the already-assigned ancestor variables, and eliminate
+	// any remaining free variables by max (a valid upper bound). The product of
+	// the per-cluster bounds is the completion bound for x.
+	factor h(1.0);
+	const flist& cl = m_clusters[x];
+	for (flist::const_iterator it = cl.begin(); it != cl.end(); ++it) {
+		findex a = (*it);
+		factor bel = calc_belief(a);
+
+		// Condition on assigned ancestor variables in the belief's scope.
+		variable_set sc = bel.vars();
+		for (variable_set::const_iterator vi = sc.begin(); vi != sc.end(); ++vi) {
+			vindex v = vi->label();
+			if (v < config.size() && config[v] != (size_t) -1) {
+				bel = bel.condition(variable_set(*vi), config[v]);
+			}
+		}
+
+		// Eliminate any residual free variables by max (admissible upper bound).
+		if (bel.nvar() > 0) {
+			bel = bel.max(bel.vars());
+		}
+
+		h *= bel; // combine the mini-bucket parts (scalars => scalar product)
+	}
+
+	return h.max(); // scalar linear upper bound
+}
+
 void wmb::forward(double step) {
 
 	if (m_debug) {
@@ -701,6 +726,10 @@ void wmb::forward(double step) {
 	}
 
 	m_logz = 0;
+	// Per-variable log-normalization accumulator (reset each forward pass), so
+	// callers can reconstruct absolute per-node completion bounds from the
+	// normalized beliefs returned by get_heuristic().
+	m_bucket_norm.assign(m_gmo.nvar(), 0.0);
 	for (variable_order_t::const_iterator x = m_order.begin(); x != m_order.end(); ++x) {
 
 		if (m_debug) {
@@ -731,6 +760,7 @@ void wmb::forward(double step) {
 				double mx = m_forward[ei].max();
 				m_forward[ei] /= mx;
 				m_logz += std::log(mx);
+				m_bucket_norm[*x] += std::log(mx); // attribute the stripped constant to x
 
 				if (m_debug) {
 					std::cout << "  forward msg (" << a << "," << b << "): elim = " << VX << " -> ";
@@ -749,11 +779,11 @@ void wmb::forward(double step) {
 		std::map<size_t, size_t>::iterator mi = m_cluster2var.find(*ci);
 		assert(mi != m_cluster2var.end());
 		size_t v = mi->second;
-		if (m_var_types[v] == false) { // SUM variable
-			F += log( bel.sum());
-		} else { // MAP variable
-			F += log( bel.max() );
-		}
+		double contrib = (m_var_types[v] == false) ? std::log(bel.sum())
+				: std::log(bel.max());
+		F += contrib;
+		if (v < m_bucket_norm.size())
+			m_bucket_norm[v] += contrib; // root residual belongs to the root variable
 	}
 
 	// Partition function or MAP/MMAP value

@@ -351,6 +351,27 @@ public:
 	void init();
 
 	///
+	/// \brief Heuristic upper bound for a search algorithm (e.g. AOBB).
+	///
+	/// Given a variable \c x (an OR node in an AND/OR search) and a partial
+	/// assignment of the variables that are ancestors of \c x in the pseudo
+	/// tree, return an upper bound (in LINEAR space) on the optimal value
+	/// achievable by completing the sub-problem rooted at \c x. The bound is
+	/// derived from the weighted mini-bucket messages, so it is only valid
+	/// after run()/init() have populated the messages. Free (unassigned)
+	/// variables in the mini-bucket beliefs are eliminated by max, which keeps
+	/// the result an admissible (valid) upper bound for both MAP and SUM
+	/// variables.
+	///
+	/// \param x 		The bucket/OR variable (post-evidence index)
+	/// \param config 	Partial assignment indexed by variable id; entries for
+	///					the ancestors of \c x must be set, others are ignored
+	///					(use (size_t)-1 to mark an unassigned variable).
+	/// \return an upper bound (linear space) on the completion value.
+	///
+	double get_heuristic(vindex x, const std::vector<size_t>& config);
+
+	///
 	/// \brief Compute the belief of a cluster.
 	/// \param a 	The index of the cluster
 	/// \return the factor representing the belief of the cluster.
@@ -437,7 +458,24 @@ private:
 	std::vector<std::vector<variable_set> > m_separators; 	///< Separators between clusters
 	std::map<size_t, size_t> m_cluster2var;					///< Maps cluster id to a variable id
 
+	std::vector<double> m_bucket_norm;	///< Per-variable sum of log-normalization constants
+										///< stripped from that variable's forward messages during
+										///< the forward pass (folded into m_logz). Used to
+										///< reconstruct absolute per-node completion bounds.
+
 	bool m_debug;						///< Internal debugging flag
+
+public:
+	///
+	/// \brief Log of the normalization constant stripped from variable \c x's
+	///        forward messages during the forward pass. The absolute (un-
+	///        normalized) completion bound below \c x is obtained by multiplying
+	///        get_heuristic(x, config) by exp() of the sum of these values over
+	///        \c x and all of its pseudo-tree descendants. Valid after run().
+	///
+	inline double bucket_norm(vindex x) const {
+		return (x < m_bucket_norm.size()) ? m_bucket_norm[x] : 0.0;
+	}
 
 };
 

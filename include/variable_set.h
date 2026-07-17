@@ -67,9 +67,15 @@ public:
 	///
 	/// A const iterator for the variable set.
 	///
-	class const_iterator :
-			public std::iterator<std::bidirectional_iterator_tag, variable, ptrdiff_t,
-			const variable*, const variable&> {
+	class const_iterator {
+	public:
+		// Iterator traits (previously inherited from the now-deprecated
+		// std::iterator base class, removed in favor of explicit typedefs).
+		typedef std::bidirectional_iterator_tag iterator_category;
+		typedef variable value_type;
+		typedef ptrdiff_t difference_type;
+		typedef const variable* pointer;
+		typedef const variable& reference;
 	private:
 		size_t m_i;
 		variable_set const* m_vs;

@@ -82,7 +82,10 @@ void cte::init() {
 	}
 
 	// Get the factors scopes
-	size_t n = m_gmo.num_nodes();
+	// The elimination graph is indexed by variable label, so it must be sized
+	// by the number of variables (not num_nodes(), which counts factors and can
+	// be smaller than nvar() -- e.g. paskin.uai has 6 vars but 5 factors).
+	size_t n = m_gmo.nvar();
 	std::vector<variable_set> fin;
 	for (std::vector<factor>::const_iterator i = m_gmo.get_factors().begin();
 			i != m_gmo.get_factors().end(); ++i) {

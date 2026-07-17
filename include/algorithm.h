@@ -61,11 +61,18 @@ public:
 	///
 //	virtual algorithm* clone() const = 0;
 
-	///	
+	///
 	/// \brief Destructs the algorithm.
 	///
-	virtual ~algorithm() {}; 
-	
+	virtual ~algorithm() {};
+
+	// This is a polymorphic base, so the virtual destructor must stay.
+	// Default the copy operations explicitly (rather than let them be
+	// implicit) to avoid the deprecation of implicit copies alongside a
+	// user-declared destructor.
+	algorithm(const algorithm&) = default;
+	algorithm& operator=(const algorithm&) = default;
+
 	///
 	/// \brief Inialize the algorithm.
 	///

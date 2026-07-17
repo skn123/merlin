@@ -63,6 +63,12 @@ PYBIND11_MODULE(merlin, m) {
                       "Equivalent sample size.")
         .def_property("init_factors", &Merlin::get_init_factor_method, &Merlin::set_init_factor_method,
                       "Factor initialization method.")
+        .def_property("ls_seed", &Merlin::get_ls_seed, &Merlin::set_ls_seed,
+                      "AOBB/BRAOBB: seed the incumbent with a GLS+ local-search solution (MAP and MMAP).")
+        .def_property("ls_time_limit", &Merlin::get_ls_time_limit, &Merlin::set_ls_time_limit,
+                      "AOBB/BRAOBB: time budget for the GLS+ incumbent seed (seconds).")
+        .def_property("ls_max_flips", &Merlin::get_ls_max_flips, &Merlin::set_ls_max_flips,
+                      "AOBB/BRAOBB: flip budget for the GLS+ incumbent seed (0 = time governs).")
         .def("init", &Merlin::init,
              "Initialize the solver.\n\n"
              ":return: True if successful, False otherwise.")
@@ -83,6 +89,8 @@ PYBIND11_MODULE(merlin, m) {
     algorithm_members[py::str("AOBB")] = py::cast(MERLIN_ALGO_AOBB);
     algorithm_members[py::str("AOBF")] = py::cast(MERLIN_ALGO_AOBF);
     algorithm_members[py::str("RBFAOO")] = py::cast(MERLIN_ALGO_RBFAOO);
+    algorithm_members[py::str("SLS")] = py::cast(MERLIN_ALGO_SLS);
+    algorithm_members[py::str("GLS")] = py::cast(MERLIN_ALGO_GLS);
     algorithm_members[py::str("BTE")] = py::cast(MERLIN_ALGO_BTE);
     algorithm_members[py::str("CTE")] = py::cast(MERLIN_ALGO_CTE);
 
@@ -96,6 +104,8 @@ PYBIND11_MODULE(merlin, m) {
     AlgorithmClass.attr("AOBB").attr("__doc__") = "AND/OR Branch and Bound";
     AlgorithmClass.attr("AOBF").attr("__doc__") = "Best-First AND/OR Search";
     AlgorithmClass.attr("RBFAOO").attr("__doc__") = "Recursive Best-First AND/OR Search";
+    AlgorithmClass.attr("SLS").attr("__doc__") = "Stochastic Local Search (G+StS)";
+    AlgorithmClass.attr("GLS").attr("__doc__") = "Guided Local Search (GLS+)";
     AlgorithmClass.attr("BTE").attr("__doc__") = "Bucket-Tree Elimination";
     AlgorithmClass.attr("CTE").attr("__doc__") = "Clique-Tree Elimination";
     m.attr("Algorithm") = AlgorithmClass;

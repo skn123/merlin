@@ -46,6 +46,10 @@
 /build/
 /build_native/
 
+# Generated Doxygen documentation
+/docs/html/
+/docs/latex/
+
 # Eclipse settings
 .settings/
 .cproject

@@ -58,6 +58,13 @@ struct ProgramOptions {
 	double threshold;				///< Tolerance threshold value (default 1e-06)
 	double alpha;					///< Equivalent sample size (for Bayesian parameter estimation)
 	int initFactors;					///< Initialize the CPTs (for EM learning)
+	size_t rotateLimit;				///< BRAOBB nodes per subproblem before rotating (default 1000)
+	bool lsSeed;					///< AOBB/BRAOBB: seed the incumbent with GLS+ (MAP only; default on)
+	bool lsSeedSet;					///< Whether --ls-seed/--no-ls-seed was given
+	double lsTimeLimit;				///< AOBB/BRAOBB: GLS+ seed time budget (seconds)
+	bool lsTimeLimitSet;			///< Whether --ls-time-limit was given
+	long lsMaxFlips;				///< AOBB/BRAOBB: GLS+ seed flip budget (0 = time governs)
+	bool lsMaxFlipsSet;				///< Whether --ls-max-flips was given
 
 public:
 
@@ -82,6 +89,13 @@ inline ProgramOptions::ProgramOptions() :
 		positive(false),
 		threshold(1e-6),
 		alpha(5.0),
-		initFactors(MERLIN_INIT_UNIFORM) {};
+		initFactors(MERLIN_INIT_UNIFORM),
+		rotateLimit(1000),
+		lsSeed(true),
+		lsSeedSet(false),
+		lsTimeLimit(5.0),
+		lsTimeLimitSet(false),
+		lsMaxFlips(0),
+		lsMaxFlipsSet(false) {};
 
 #endif /* IBM_MERLIN_PROGRAM_OPTIONS_H_ */

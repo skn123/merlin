@@ -90,6 +90,9 @@
 #define MERLIN_ALGO_RBFAOO	1007		///< Recursive Best-First AND/OR Search
 #define MERLIN_ALGO_BTE		1008		///< Bucket-Tree Elimination
 #define MERLIN_ALGO_CTE		1009		///< Clique-Tree Elimination
+#define MERLIN_ALGO_BRAOBB	1010		///< Breadth-Rotating AND/OR Branch and Bound
+#define MERLIN_ALGO_SLS		1011		///< Stochastic Local Search (G+StS)
+#define MERLIN_ALGO_GLS		1012		///< Guided Local Search (GLS+)
 
 ///
 /// Probabilistic inference tasks.
