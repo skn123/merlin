@@ -236,6 +236,9 @@ TEST(Integration, CancerMAPAobbIsExact) {
     eng.set_evidence_file(data_path("cancer.evid"));
     eng.set_task(MERLIN_TASK_MAP);
     eng.set_algorithm(MERLIN_ALGO_AOBB);
+    eng.set_ls_seed(false);  // test the exact search config, not the GLS+ seed
+                             // (cancer MAP has tied optima; the seed may report a
+                             //  different but equally-optimal assignment)
     eng.set_output_format(MERLIN_OUTPUT_UAI);
     eng.set_output_file(out_base);
 
@@ -272,6 +275,9 @@ TEST(Integration, Simple5MMAPAobbIsExact) {
     eng.set_query_file(data_path("simple5.map"));
     eng.set_task(MERLIN_TASK_MMAP);
     eng.set_algorithm(MERLIN_ALGO_AOBB);
+    eng.set_ls_seed(false);  // test the exact search config, not the GLS+ seed
+                             // (tied optima; the seed may report a different but
+                             //  equally-optimal query assignment)
     eng.set_output_format(MERLIN_OUTPUT_UAI);
     eng.set_output_file(out_base);
 
@@ -296,6 +302,38 @@ TEST(Integration, Simple5MMAPAobbIsExact) {
     const size_t expected[3] = {1, 1, 0};  // brute-force MMAP query config
     for (size_t i = 0; i < 3; ++i)
         EXPECT_EQ(cfg[i], expected[i]) << "query variable " << i;
+}
+
+// With the GLS+ incumbent seed enabled (the default) on an MMAP query, AOBB must
+// still report the proven-optimal MMAP value. For MMAP the seed re-evaluates the
+// GLS+ query configuration into a valid upper-bound cost (exact conditioned sum-out
+// here, since simple5 is small), so it can change which tied optimum is reported
+// but never the optimal value.
+TEST(Integration, Simple5MMAPAobbGlsSeedStillOptimal) {
+    const std::string out_base = tmp_path("simple5_mmap_aobb_seed");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("simple5.uai"));
+    eng.set_query_file(data_path("simple5.map"));
+    eng.set_task(MERLIN_TASK_MMAP);
+    eng.set_algorithm(MERLIN_ALGO_AOBB);
+    eng.set_ls_seed(true);        // explicit: seed the incumbent with GLS+ (MMAP)
+    eng.set_ls_time_limit(1.0);   // small seed budget for a fast test
+    eng.set_output_format(MERLIN_OUTPUT_JSON);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MMAP.json");
+    ASSERT_FALSE(produced.empty()) << "no MMAP JSON output produced";
+    EXPECT_NE(produced.find("\"optimal\" : true"), std::string::npos)
+        << "expected optimal:true in: " << produced;
+    // The proven MMAP optimum value (matches Simple5MMAPBraobbRotationInvariant).
+    size_t p = produced.find("\"value\" : ");
+    ASSERT_NE(p, std::string::npos) << produced;
+    EXPECT_NEAR(std::atof(produced.c_str() + p + 10), 11.285626, 1e-4) << produced;
 }
 
 // A generous time limit does not change the result: the search still completes
@@ -327,6 +365,34 @@ TEST(Integration, CancerMAPAobbTimeLimitStillOptimal) {
         << produced;
 }
 
+// With the GLS+ incumbent seed enabled (the default), AOBB must still report the
+// proven-optimal MAP value: the seed only lowers the incumbent used for pruning,
+// so it can change which tied optimum is reported but never the optimal value.
+TEST(Integration, CancerMAPAobbGlsSeedStillOptimal) {
+    const std::string out_base = tmp_path("cancer_map_aobb_seed");
+
+    Merlin eng;
+    eng.set_use_files(true);
+    eng.set_model_file(data_path("cancer.uai"));
+    eng.set_evidence_file(data_path("cancer.evid"));
+    eng.set_task(MERLIN_TASK_MAP);
+    eng.set_algorithm(MERLIN_ALGO_AOBB);
+    eng.set_ls_seed(true);        // explicit: seed the incumbent with GLS+
+    eng.set_ls_time_limit(1.0);   // small seed budget for a fast test
+    eng.set_output_format(MERLIN_OUTPUT_JSON);
+    eng.set_output_file(out_base);
+
+    ASSERT_TRUE(eng.init());
+    ASSERT_EQ(eng.run(), 0);
+
+    std::string produced = slurp(out_base + ".MAP.json");
+    ASSERT_FALSE(produced.empty()) << "no MAP JSON output produced";
+    EXPECT_NE(produced.find("\"optimal\" : true"), std::string::npos)
+        << "expected optimal:true in: " << produced;
+    EXPECT_NE(produced.find("\"value\" : -2.617844"), std::string::npos)
+        << produced;
+}
+
 // ---- BRAOBB (breadth-rotating AND/OR BnB) MAP / MMAP -----------------------
 //
 // BRAOBB explores the same search space as AOBB and is exact, so it must return
@@ -344,6 +410,9 @@ TEST(Integration, CancerMAPBraobbIsExact) {
     eng.set_evidence_file(data_path("cancer.evid"));
     eng.set_task(MERLIN_TASK_MAP);
     eng.set_algorithm(MERLIN_ALGO_BRAOBB);
+    eng.set_ls_seed(false);  // test the exact search config, not the GLS+ seed
+                             // (cancer MAP has tied optima; the seed may report a
+                             //  different but equally-optimal assignment)
     eng.set_output_format(MERLIN_OUTPUT_UAI);
     eng.set_output_file(out_base);
 
@@ -371,6 +440,9 @@ TEST(Integration, Simple5MMAPBraobbIsExact) {
     eng.set_query_file(data_path("simple5.map"));
     eng.set_task(MERLIN_TASK_MMAP);
     eng.set_algorithm(MERLIN_ALGO_BRAOBB);
+    eng.set_ls_seed(false);  // test the exact search config, not the GLS+ seed
+                             // (tied optima; the seed may report a different but
+                             //  equally-optimal query assignment)
     eng.set_output_format(MERLIN_OUTPUT_UAI);
     eng.set_output_file(out_base);
 

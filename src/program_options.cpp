@@ -51,6 +51,10 @@ ProgramOptions* parseCommandLine(int argc, char** argv) {
 			("time-limit,l", po::value<int>(), "time limit in seconds")
 			("rotate-limit,r", po::value<int>(), "BRAOBB nodes per subproblem before rotating (default 1000)")
 			("seed,s", po::value<int>(), "seed for the random number generator")
+			("ls-seed", "seed AOBB/BRAOBB with a GLS+ local-search solution (MAP only; default on)")
+			("no-ls-seed", "disable the GLS+ incumbent seed for AOBB/BRAOBB")
+			("ls-time-limit", po::value<double>(), "time budget for the GLS+ incumbent seed in seconds (default 5.0)")
+			("ls-max-flips", po::value<int>(), "flip budget for the GLS+ incumbent seed (0 = time governs)")
 			("verbose,v", po::value<int>(), "specify verbosity level")
 			("debug,d", "enable debug mode")
 			("positive,p", "enable positive probability values (> 0)")
@@ -198,6 +202,23 @@ ProgramOptions* parseCommandLine(int argc, char** argv) {
 		// parse the random generator seed
 		if (vm.count("seed")) {
 			opt->seed = vm["seed"].as<int>();
+		}
+
+		// parse the GLS+ incumbent seed options (AOBB/BRAOBB, MAP only)
+		if (vm.count("no-ls-seed")) {
+			opt->lsSeed = false;
+			opt->lsSeedSet = true;
+		} else if (vm.count("ls-seed")) {
+			opt->lsSeed = true;
+			opt->lsSeedSet = true;
+		}
+		if (vm.count("ls-time-limit")) {
+			opt->lsTimeLimit = vm["ls-time-limit"].as<double>();
+			opt->lsTimeLimitSet = true;
+		}
+		if (vm.count("ls-max-flips")) {
+			opt->lsMaxFlips = (long) vm["ls-max-flips"].as<int>();
+			opt->lsMaxFlipsSet = true;
 		}
 
 		// parse the number of iterations

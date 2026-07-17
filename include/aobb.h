@@ -122,7 +122,7 @@ public:
 	///
 	/// \brief Properties of the algorithm.
 	///
-	MER_ENUM( Property , iBound,Order,Iter,Task,Debug,OrderIter,Cache,TimeLimit,RotateLimit );
+	MER_ENUM( Property , iBound,Order,Iter,Task,Debug,OrderIter,Cache,TimeLimit,RotateLimit,LsSeed,LsTimeLimit,LsMaxFlips,Seed );
 
 public:
 	// Setters:
@@ -162,6 +162,10 @@ public:
 		m_debug = false;
 		m_caching = true;
 		m_time_limit = 0.0;
+		m_ls_seed = true;
+		m_ls_time_limit = 5.0;
+		m_ls_max_flips = 0;
+		m_seed = 12345678;
 		std::vector<std::string> strs = split(opt, ',');
 		for (size_t i = 0; i < strs.size(); ++i) {
 			std::vector<std::string> asgn = split(strs[i], '=');
@@ -191,6 +195,18 @@ public:
 				break;
 			case Property::TimeLimit:
 				m_time_limit = atof(asgn[1].c_str());
+				break;
+			case Property::LsSeed:
+				m_ls_seed = (atol(asgn[1].c_str()) == 0) ? false : true;
+				break;
+			case Property::LsTimeLimit:
+				m_ls_time_limit = atof(asgn[1].c_str());
+				break;
+			case Property::LsMaxFlips:
+				m_ls_max_flips = atol(asgn[1].c_str());
+				break;
+			case Property::Seed:
+				m_seed = (size_t) atol(asgn[1].c_str());
 				break;
 			default:
 				break;
@@ -230,6 +246,39 @@ protected:
 	///        right label.
 	///
 	virtual const char* algo_name() const { return "aobb"; }
+
+	///
+	/// \brief Run Guided Local Search (GLS+) to obtain an initial solution and seed
+	///        the incumbent cost + best configuration used for pruning (MAP & MMAP).
+	///
+	/// The incumbent used for pruning must be an UPPER bound on the optimal cost (a
+	/// lower bound on the optimal probability); seeding it too low could prune the
+	/// optimum. GLS+ supplies a candidate configuration:
+	///  - MAP: the GLS+ log-probability is the negative of a true solution cost, a
+	///    valid upper bound on the optimum, used directly.
+	///  - MMAP: GLS+'s own objective is a WMB upper bound on P(x_M,e) (lower bound on
+	///    cost) -- the wrong direction, so it is NOT used. Instead the GLS+ query
+	///    configuration x_M is RE-EVALUATED into a valid upper-bound cost: exactly
+	///    (-log Q(x_M) via label() over MAP factors + solve_subproblem() over each
+	///    conditioned SUM subtree) when the conditioned-SUM width <= i-bound, else a
+	///    single-configuration lower bound on probability P(x_M, x_S=0, e).
+	///
+	/// No-op (returns false) if the seed is disabled (m_ls_seed), GLS+ finds no
+	/// solution, the (MMAP) configuration has zero probability, or the seed does not
+	/// improve the incumbent. On success sets m_incumbent_cost, m_best_config,
+	/// m_found_solution and returns true. Shared by aobb::run and braobb::run.
+	///
+	bool seed_incumbent();
+
+	///
+	/// \brief Induced width of the SUM variables once the MAP variables are
+	///        conditioned out (removed from the graph), under the constrained
+	///        elimination order. Bounds the cost of exactly summing out a
+	///        conditioned SUM subtree via solve_subproblem (which is exponential in
+	///        this width and otherwise unguarded). Used by the MMAP seed to decide
+	///        exact evaluation (width <= i-bound) vs. the single-config fallback.
+	///
+	size_t conditioned_sum_width() const;
 
 	///
 	/// \brief Recursively free an AND/OR sub-tree.
@@ -360,6 +409,12 @@ protected:
 	double m_time_limit;				///< Search time limit in seconds (0 = unlimited)
 	bool m_proved_optimal;				///< true if the search completed (optimum proved)
 	bool m_found_solution;				///< true if any complete solution was found
+
+	// Local-search (GLS+) incumbent seed (MAP only; see seed_incumbent).
+	bool m_ls_seed;						///< Enable the GLS+ incumbent seed
+	double m_ls_time_limit;				///< Time budget for the GLS+ seed run (seconds)
+	long m_ls_max_flips;				///< Flip budget for the GLS+ seed (0 = time governs)
+	size_t m_seed;						///< RNG seed for the GLS+ seed run
 
 	// OR caching: per variable, the context (ancestors whose assignment
 	// determines the sub-problem below the variable) and a table mapping the

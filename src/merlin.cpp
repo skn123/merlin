@@ -58,6 +58,9 @@ Merlin::Merlin() {
 	m_timeLimit = 0.0; // 0 = unlimited
 	m_rotateLimit = 1000; // BRAOBB default
 	m_seed = 12345678; // SLS/GLS+ RNG seed (deterministic by default)
+	m_lsSeed = true; // AOBB/BRAOBB: seed the incumbent with GLS+ (MAP only)
+	m_lsTimeLimit = 5.0; // GLS+ seed time budget (seconds)
+	m_lsMaxFlips = 0; // GLS+ seed flip budget (0 = time governs)
 }
 
 ///
@@ -1114,6 +1117,10 @@ int Merlin::run() {
 					<< "OrderIter=100" << ","
 					<< "Iter=" << m_iterations << ","
 					<< "TimeLimit=" << m_timeLimit << ","
+					<< "LsSeed=" << (m_lsSeed ? 1 : 0) << ","
+					<< "LsTimeLimit=" << m_lsTimeLimit << ","
+					<< "LsMaxFlips=" << m_lsMaxFlips << ","
+					<< "Seed=" << m_seed << ","
 					<< "Task=MAP";
 				s.set_properties(oss.str());
 				std::vector<vindex> qvars;
@@ -1135,6 +1142,10 @@ int Merlin::run() {
 					<< "Iter=" << m_iterations << ","
 					<< "TimeLimit=" << m_timeLimit << ","
 					<< "RotateLimit=" << m_rotateLimit << ","
+					<< "LsSeed=" << (m_lsSeed ? 1 : 0) << ","
+					<< "LsTimeLimit=" << m_lsTimeLimit << ","
+					<< "LsMaxFlips=" << m_lsMaxFlips << ","
+					<< "Seed=" << m_seed << ","
 					<< "Task=MAP";
 				s.set_properties(oss.str());
 				std::vector<vindex> qvars;
@@ -1286,6 +1297,10 @@ int Merlin::run() {
 					<< "OrderIter=100" << ","
 					<< "Iter=" << m_iterations << ","
 					<< "TimeLimit=" << m_timeLimit << ","
+					<< "LsSeed=" << (m_lsSeed ? 1 : 0) << ","
+					<< "LsTimeLimit=" << m_lsTimeLimit << ","
+					<< "LsMaxFlips=" << m_lsMaxFlips << ","
+					<< "Seed=" << m_seed << ","
 					<< "Task=MMAP";
 				s.set_properties(oss.str());
 				std::vector<size_t> qvars;
@@ -1306,6 +1321,10 @@ int Merlin::run() {
 					<< "Iter=" << m_iterations << ","
 					<< "TimeLimit=" << m_timeLimit << ","
 					<< "RotateLimit=" << m_rotateLimit << ","
+					<< "LsSeed=" << (m_lsSeed ? 1 : 0) << ","
+					<< "LsTimeLimit=" << m_lsTimeLimit << ","
+					<< "LsMaxFlips=" << m_lsMaxFlips << ","
+					<< "Seed=" << m_seed << ","
 					<< "Task=MMAP";
 				s.set_properties(oss.str());
 				std::vector<size_t> qvars;

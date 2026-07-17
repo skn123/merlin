@@ -73,6 +73,9 @@ protected:
 	double m_timeLimit;					///< Search time limit in seconds (<=0 = unlimited)
 	size_t m_rotateLimit;				///< BRAOBB rotation limit (nodes per subproblem; 0=none)
 	size_t m_seed;						///< RNG seed for stochastic algorithms (SLS/GLS+)
+	bool m_lsSeed;						///< AOBB/BRAOBB: seed the incumbent with GLS+ (MAP only)
+	double m_lsTimeLimit;				///< AOBB/BRAOBB: GLS+ seed time budget (seconds)
+	long m_lsMaxFlips;					///< AOBB/BRAOBB: GLS+ seed flip budget (0 = time governs)
 
 private:
 	// Local members:
@@ -227,6 +230,39 @@ public:
 	/// \return The random seed.
 	///
 	size_t get_seed() const { return m_seed; }
+
+	///
+	/// \brief Enable/disable the GLS+ incumbent seed for AOBB/BRAOBB (MAP only).
+	/// \param b	true to seed the search with a Guided Local Search solution.
+	///
+	void set_ls_seed(bool b) { m_lsSeed = b; }
+	///
+	/// \brief Get whether the GLS+ incumbent seed is enabled.
+	/// \return true if the seed is enabled.
+	///
+	bool get_ls_seed() const { return m_lsSeed; }
+
+	///
+	/// \brief Set the time budget for the GLS+ incumbent seed run (seconds).
+	/// \param t	The seed time limit in seconds.
+	///
+	void set_ls_time_limit(double t) { m_lsTimeLimit = t; }
+	///
+	/// \brief Get the GLS+ incumbent seed time budget.
+	/// \return The seed time limit in seconds.
+	///
+	double get_ls_time_limit() const { return m_lsTimeLimit; }
+
+	///
+	/// \brief Set the flip budget for the GLS+ incumbent seed (0 = time governs).
+	/// \param f	The seed flip budget.
+	///
+	void set_ls_max_flips(long f) { m_lsMaxFlips = f; }
+	///
+	/// \brief Get the GLS+ incumbent seed flip budget.
+	/// \return The seed flip budget (0 = time governs).
+	///
+	long get_ls_max_flips() const { return m_lsMaxFlips; }
 
 	///
 	/// \brief Set the equivalent sample size.

@@ -82,9 +82,14 @@ void braobb::run() {
 	stacks.push(root_stack);
 	size_t rotate_count = 0;
 
-	// No greedy incumbent seed: the incumbent cost (m_incumbent_cost) starts at
-	// +infinity and improves (lowers) only when the search solves a complete
-	// assignment (see aobb). All values are costs in negative-log space.
+	// Seed the incumbent with a Guided Local Search (GLS+) solution (MAP only), so
+	// branch-and-bound can prune from the first node and a valid solution is always
+	// available (anytime). No-op for MMAP or when disabled. On success it lowers
+	// m_incumbent_cost and sets m_best_config / m_found_solution; mirror the seed
+	// into the local best_asgn so a later improving solution overwrites it cleanly.
+	// All values are costs in negative-log space.
+	if (seed_incumbent())
+		best_asgn = m_best_config;
 
 	bool timed_out = false;
 	size_t steps = 0;

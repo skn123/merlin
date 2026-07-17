@@ -24,8 +24,10 @@
 /// \author Radu Marinescu radu.marinescu@ie.ibm.com
 
 #include "aobb.h"
+#include "gls.h"
 
 #include <algorithm>
+#include <set>
 #include <stack>
 #include <sstream>
 
@@ -305,6 +307,166 @@ void aobb::init() {
 		m_cache.resize(n);
 }
 
+// Induced width of the SUM variables after conditioning out (removing) the MAP
+// variables, under the constrained elimination order (SUM variables come first).
+// Conditioning fixes the MAP variables, so they are deleted from the graph: a
+// fixed variable induces no fill among its neighbors and contributes 0 to width.
+// This bounds the cost of exactly summing out a conditioned SUM subtree via
+// solve_subproblem (exponential in this width, otherwise unguarded).
+//
+// NOTE: we do NOT call graphical_model::induced_width on a SUM-only order over the
+// full mrf(): variables absent from the passed order default to elimination
+// position 0, so MAP neighbors would be treated as already-eliminated and the
+// width UNDER-counted -- the unsafe direction (it could admit an intractable exact
+// eval). Here MAP variables are removed from the adjacency entirely.
+size_t aobb::conditioned_sum_width() const {
+	size_t nv = m_gmo.nvar();
+	// SUM-only adjacency keyed by variable label (MAP vars dropped).
+	std::vector<std::set<size_t> > adj(nv);
+	std::vector<variable_set> mb = m_gmo.mrf();
+	for (size_t v = 0; v < nv; ++v) {
+		if (m_var_types[v]) continue; // MAP var: not in the conditioned graph
+		for (variable_set::const_iterator it = mb[v].begin(); it != mb[v].end(); ++it) {
+			vindex u = it->label();
+			if (u != v && !m_var_types[u]) adj[v].insert(u); // keep SUM neighbors only
+		}
+	}
+	// Min-fill-style elimination over the SUM variables in the constrained order
+	// (SUM variables precede all MAP variables in m_order). Count, for each SUM
+	// variable, its not-yet-eliminated SUM neighbors, then connect them (fill-in).
+	size_t width = 0;
+	std::vector<char> eliminated(nv, 0);
+	for (size_t oi = 0; oi < m_order.size(); ++oi) {
+		vindex x = m_order[oi];
+		if (m_var_types[x]) continue; // skip MAP vars entirely
+		// Neighbors of x not yet eliminated.
+		std::vector<size_t> nb;
+		for (std::set<size_t>::const_iterator it = adj[x].begin();
+				it != adj[x].end(); ++it) {
+			if (!eliminated[*it]) nb.push_back(*it);
+		}
+		width = std::max(width, nb.size());
+		// Connect the surviving neighbors (induced fill edges).
+		for (size_t i = 0; i < nb.size(); ++i)
+			for (size_t j = i + 1; j < nb.size(); ++j) {
+				adj[nb[i]].insert(nb[j]);
+				adj[nb[j]].insert(nb[i]);
+			}
+		eliminated[x] = 1;
+	}
+	return width;
+}
+
+// Run GLS+ to obtain an initial solution and seed the incumbent cost + best
+// configuration for pruning (MAP and MMAP; see the header rationale). GLS+ is built
+// on the same post-evidence model and query, so its best_config uses the same
+// variable indexing as m_best_config. For MAP its logZ is the negative of a true
+// solution cost, used directly. For MMAP its own objective is a WMB upper bound on
+// probability (lower bound on cost -- the wrong direction), so the GLS+ query
+// configuration is RE-EVALUATED into a valid upper-bound cost (see below).
+bool aobb::seed_incumbent() {
+	if (!m_ls_seed)
+		return false;
+
+	// Cap the seed budget against the overall search time limit so the seed does
+	// not consume the whole budget: leave at least half of the remaining time for
+	// the branch-and-bound search itself. Never exceed the user's explicit seed
+	// budget. With no time limit the seed budget is used verbatim.
+	double ls_time = m_ls_time_limit;
+	if (m_time_limit > 0.0) {
+		double remaining = m_time_limit - (timeSystem() - m_start_time);
+		if (remaining <= 0.0)
+			return false; // no time left even before search starts
+		ls_time = std::min(ls_time, 0.5 * remaining);
+	}
+
+	std::cout << "[AOBB] + seeding incumbent with GLS+ ("
+			<< ls_time << "s, "
+			<< (m_ls_max_flips > 0 ? std::to_string(m_ls_max_flips) + " flips"
+					: std::string("time-bounded")) << ")" << std::endl;
+
+	gls ls(m_gmo);
+	std::ostringstream oss;
+	oss << "Task=" << (m_task == Task::MAP ? "MAP" : "MMAP")
+		<< ",TimeLimit=" << ls_time
+		<< ",Iter=" << m_ls_max_flips   // 0 => no flip budget, time governs
+		<< ",Seed=" << m_seed
+		<< ",iBound=" << m_ibound;      // used by the MMAP WMB estimator
+	ls.set_properties(oss.str());
+	ls.set_query(m_query);
+	ls.run();
+
+	if (!ls.found_solution())
+		return false;
+
+	const std::vector<index>& cfg = ls.best_config();
+	const double INF = std::numeric_limits<double>::infinity();
+	size_t n = m_gmo.nvar();
+	double cost;
+
+	if (m_task == Task::MAP) {
+		// GLS+ log-prob is the negative of a true MAP solution cost.
+		cost = -ls.logZ();
+	} else {
+		// MMAP: re-evaluate x_M = cfg (MAP vars set, SUM vars == -1) into a valid
+		// upper-bound cost. Q(x_M) = P(x_M, e) = Σ_{x_S} Π factors.
+		std::vector<size_t> asgn(cfg.begin(), cfg.end());
+
+		// SUM subtree roots: SUM var whose pseudo-tree parent is a MAP var or a root.
+		std::vector<vindex> sum_roots;
+		for (vindex v = 0; v < n; ++v) {
+			if (m_var_types[v]) continue; // MAP var
+			vindex p = m_parents[v];
+			if (p == (vindex) -1 || m_var_types[p]) sum_roots.push_back(v);
+		}
+
+		// Exact only if the conditioned-SUM problem is tractable (width <= i-bound);
+		// solve_subproblem is exponential in this width and otherwise unguarded.
+		size_t sum_width = conditioned_sum_width();
+		bool exact_ok = (sum_width <= m_ibound);
+
+		double c = 0.0;
+		if (exact_ok) {
+			// Exact -log Q(x_M): the factors partition by anchor variable. Factors
+			// with all-MAP scope are anchored at MAP vars (exact via label); every
+			// other factor is anchored inside a SUM subtree (exact via the logsumexp
+			// aggregation of solve_subproblem). No factor is counted twice.
+			for (vindex v = 0; v < n && c < INF; ++v)
+				if (m_var_types[v]) c += label(v, asgn);
+			for (size_t k = 0; k < sum_roots.size() && c < INF; ++k)
+				c += solve_subproblem(sum_roots[k], asgn, /*caching=*/false);
+			std::cout << "[AOBB] + MMAP seed eval    : exact (SUM width "
+					<< sum_width << " <= i-bound " << m_ibound << ")" << std::endl;
+		} else {
+			// Single-configuration lower bound on probability = upper bound on cost:
+			// P(x_M, x_S*, e) with x_S* = 0 (any single term <= the full sum Q(x_M)).
+			// Sum -log over ALL factors (== Σ label over ALL anchors) of the complete
+			// assignment; a valid, possibly loose, upper bound on the optimal cost.
+			std::vector<size_t> full(cfg.begin(), cfg.end());
+			for (vindex v = 0; v < n; ++v)
+				if (full[v] == (size_t) -1) full[v] = 0;
+			for (vindex v = 0; v < n && c < INF; ++v)
+				c += label(v, full);
+			std::cout << "[AOBB] + MMAP seed eval    : single-config bound (SUM width "
+					<< sum_width << " > i-bound " << m_ibound << ")" << std::endl;
+		}
+		cost = c;
+		if (cost == INF)
+			return false; // zero-probability configuration: not a usable solution
+	}
+
+	if (cost >= m_incumbent_cost)
+		return false; // does not improve (e.g. the incumbent was already seeded)
+
+	m_incumbent_cost = cost;
+	m_best_config.assign(cfg.begin(), cfg.end());
+	m_found_solution = true; // report the seed even if the search never beats it
+
+	std::cout << "[AOBB] + GLS+ seed value   : " << -cost
+			<< " (" << std::exp(-cost) << ")" << std::endl;
+	return true;
+}
+
 // Compute the per-value label and heuristic COSTS of an OR node's AND children
 // and the OR node's aggregate heuristic cost (min for a MAX variable, -logsumexp
 // for a SUM variable). All costs are in negative-log space. The per-value arrays
@@ -555,9 +717,15 @@ void aobb::run() {
 	std::stack<ao_node*> stk;
 	ao_node* super = init_search_space(stk, asgn);
 
+	// Seed the incumbent with a Guided Local Search (GLS+) solution (MAP only), so
+	// branch-and-bound can prune from the first node and a valid solution is always
+	// available (anytime). No-op for MMAP or when disabled. Lowers m_incumbent_cost.
+	seed_incumbent();
+
 	// Bottom-up value propagator: aggregates solved sub-trees, writes the OR
-	// cache, reports the incumbent cost. The incumbent starts at +infinity (no
-	// solution yet): it improves only when the search solves a complete assignment.
+	// cache, reports the incumbent cost. The incumbent starts at the GLS+ seed cost
+	// (or +infinity if not seeded) and improves only when the search solves a
+	// complete assignment with a strictly lower cost.
 	bound_propagator prop(m_gmo, m_var_types, m_caching, m_cache_context, m_cache);
 	prop.set_incumbent(m_incumbent_cost);
 
@@ -607,11 +775,13 @@ void aobb::run() {
 	}
 
 	// The propagator holds the incumbent cost and assignment (the proven optimum
-	// if the search completed, else the best complete solution reached so far).
+	// if the search completed, else the best complete solution reached by the
+	// search). If the search found its own complete solution, adopt it; otherwise
+	// retain the GLS+ seed (m_best_config / m_found_solution set by seed_incumbent).
 	m_incumbent_cost = prop.incumbent();
-	m_found_solution = prop.found_solution();
 	m_proved_optimal = !timed_out;
-	if (m_found_solution) {
+	if (prop.found_solution()) {
+		m_found_solution = true;
 		const std::vector<size_t>& cfg = prop.best_config();
 		for (size_t i = 0; i < n; ++i) m_best_config[i] = cfg[i];
 	}
