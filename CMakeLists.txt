@@ -17,7 +17,15 @@ if(POLICY CMP0167)
 endif()
 find_package(Boost COMPONENTS program_options thread REQUIRED)
 
-include_directories(include)
+# Optionally specify Boost root if installed via Homebrew
+set(BOOST_ROOT "/opt/homebrew/opt/boost")
+set(BOOST_INCLUDEDIR "${BOOST_ROOT}/include")
+set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib")
+
+# Find Boost
+find_package(Boost REQUIRED COMPONENTS program_options thread)
+set(BOOST_USE_STATIC_LIBS ON)
+include_directories(include ${Boost_INCLUDE_DIRS})
 
 # Solver sources shared by the CLI executable, the test targets, and the
 # Python bindings (everything under src/ except the CLI entry point main.cpp
