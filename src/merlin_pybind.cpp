@@ -64,7 +64,7 @@ PYBIND11_MODULE(merlin, m) {
         .def_property("init_factors", &Merlin::get_init_factor_method, &Merlin::set_init_factor_method,
                       "Factor initialization method.")
         .def_property("ls_seed", &Merlin::get_ls_seed, &Merlin::set_ls_seed,
-                      "AOBB/BRAOBB: seed the incumbent with a GLS+ local-search solution (MAP only).")
+                      "AOBB/BRAOBB: seed the incumbent with a GLS+ local-search solution (MAP and MMAP).")
         .def_property("ls_time_limit", &Merlin::get_ls_time_limit, &Merlin::set_ls_time_limit,
                       "AOBB/BRAOBB: time budget for the GLS+ incumbent seed (seconds).")
         .def_property("ls_max_flips", &Merlin::get_ls_max_flips, &Merlin::set_ls_max_flips,

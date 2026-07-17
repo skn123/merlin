@@ -297,6 +297,8 @@ void aobb::init() {
 	m_incumbent_cost = std::numeric_limits<double>::infinity();
 	m_best_config.assign(n, 0);
 	m_num_expansions = 0;
+	m_num_expansions_and = 0;
+	m_num_expansions_or = 0;
 	m_num_cache_hits = 0;
 	m_proved_optimal = false;
 	m_found_solution = false;
@@ -770,6 +772,8 @@ void aobb::run() {
 			continue;
 		}
 		++m_num_expansions;
+		if (node->type == AO_AND) ++m_num_expansions_and;
+		else ++m_num_expansions_or;
 		// Expanded into children: they will be explored, then this node's value
 		// is aggregated by the propagator when the last child solves.
 	}
@@ -798,6 +802,9 @@ void aobb::run() {
 
 	std::cout << "[AOBB] Finished searching in "
 			<< (timeSystem() - m_start_time) << " seconds" << std::endl;
+	std::cout << "[AOBB] + nodes expanded   : " << m_num_expansions << std::endl;
+	std::cout << "[AOBB] + AND nodes        : " << m_num_expansions_and << std::endl;
+	std::cout << "[AOBB] + OR nodes         : " << m_num_expansions_or << std::endl;
 	if (m_caching)
 		std::cout << "[AOBB] + cache hits       : " << m_num_cache_hits << std::endl;
 	if (timed_out)

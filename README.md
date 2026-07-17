@@ -20,15 +20,64 @@ marginals (MAR), as well as MAP (also known as maximum aposteriori or most
 probable explanation) and Marginal MAP configurations. In addition, Merlin supports
 maximum likelihoood (EM) parameter learning for Bayesian networks only.
 
-Merlin implements the classic Loopy Belief Propagation (LBP) algorithm as well
-as more advanced generalized belief propagation algorithms such as Iterative
-Join-Graph Propagation (IJGP) and Weighted Mini-Bucket Elimination (WMB). The
-WMB(i) algorithm is parameterized by an i-bound that allows for a controllable
-tradeoff between accuracy of the results and the computational
-cost. Larger values of the i-bound typically yield more accurate results but
-it takes more time and memory to compute them. Selecting a large enough i-bound
-allows for exact inference (i.e., i-bound equal to the treewidth of the model).
-For relatively small i-bounds Merlin performs approximate inference.
+Merlin implements a broad portfolio of inference algorithms spanning four
+families: **variable elimination** (exact bucket/clique tree elimination and the
+bounded weighted mini-bucket scheme), **message passing** (loopy and generalized
+belief propagation), **AND/OR search** (branch-and-bound, best-first, and local
+search for optimization tasks), and **sampling** (Gibbs). Several of these are
+parameterized by an *i-bound* that trades accuracy for cost: larger i-bounds
+yield tighter results at higher time/memory cost, and an i-bound at least equal
+to the treewidth of the model makes the mini-bucket scheme (and the search
+heuristics built on it) exact; smaller i-bounds give approximate inference.
+
+For the optimization tasks (MAP and Marginal MAP) Merlin provides exact
+depth-first (AOBB), breadth-rotating (BRAOBB), best-first (AOBF) and recursive
+best-first (RBFAOO) AND/OR search, all guided by a weighted mini-bucket
+heuristic, plus fast approximate stochastic (SLS) and guided (GLS+) local search.
+The branch-and-bound solvers are *anytime* (a valid time limit returns the best
+solution found so far) and are seeded with a local-search incumbent to prune
+aggressively from the first node.
+
+## Algorithms
+
+Merlin supports the following algorithms. The **CLI name** is the value passed to
+`--algorithm`; the corresponding API enums are `MERLIN_ALGO_<NAME>` (C++) and
+`merlin.Algorithm.<NAME>` (Python), e.g. `aobb` &rarr; `MERLIN_ALGO_AOBB` /
+`merlin.Algorithm.AOBB`.
+
+| Algorithm | CLI name | Family | Exact / Approximate | Tasks | Key parameters |
+|---|---|---|---|---|---|
+| Clique-Tree Elimination | `cte` | Variable elimination | Exact | MAR, EM | (elimination order) |
+| Bucket-Tree Elimination | `bte` | Variable elimination | Exact | PR, MAR, MAP, MMAP, EM | (elimination order) |
+| Weighted Mini-Bucket | `wmb` | Variable elimination (bounded) | Approximate (exact if `i-bound ≥ treewidth`) | PR, MAR, MAP, MMAP, EM | `ibound`, `iterations` |
+| Loopy Belief Propagation | `lbp` | Message passing | Approximate | MAR | `iterations`, `threshold` |
+| Iterative Join-Graph Propagation | `ijgp` | Message passing (generalized BP) | Approximate | MAR, MAP | `ibound`, `iterations` |
+| Join-Graph Linear Programming | `jglp` | Message passing / LP relaxation | Approximate | MAP | `ibound`, `iterations` |
+| Gibbs Sampling | `gibbs` | Sampling (MCMC) | Approximate | MAR, MAP | `samples`, `iterations`, `seed` |
+| AND/OR Branch-and-Bound | `aobb` | Search (depth-first B&B) | Exact (anytime) | MAP, MMAP | `ibound`, `time-limit`, `ls-*`, `seed` |
+| Breadth-Rotating AOBB | `braobb` | Search (breadth-rotating B&B) | Exact (anytime) | MAP, MMAP | `ibound`, `time-limit`, `rotate-limit`, `ls-*`, `seed` |
+| Best-First AND/OR Search (AO\*) | `aobf` | Search (best-first) | Exact (anytime) | MAP, MMAP | `ibound`, `time-limit` |
+| Recursive Best-First AND/OR Search | `rbfaoo` | Search (recursive best-first) | Exact (anytime) | MAP, MMAP | `ibound`, `time-limit` |
+| Stochastic Local Search (G+StS) | `sls` | Search (stochastic local search) | Approximate | MAP, MMAP | `time-limit`, `iterations`, `seed`, `ibound` (MMAP) |
+| Guided Local Search (GLS+) | `gls` (`gls+`, `glsp`) | Search (guided local search) | Approximate | MAP, MMAP | `time-limit`, `iterations`, `seed`, `ibound` (MMAP) |
+
+Notes:
+
+- **Exact search is anytime.** `aobb`, `braobb`, `aobf` and `rbfaoo` return the
+  proven optimum if allowed to run to completion; under a `--time-limit` they
+  return the best complete solution found so far (the JSON output flags
+  `optimal: false` in that case). When finished they report the number of nodes
+  expanded (total, AND, and OR).
+- **Local-search seeding.** `aobb`/`braobb` seed their branch-and-bound incumbent
+  with a GLS+ local-search solution before searching, so a valid solution is
+  available immediately and pruning starts from the first node. For MAP the seed
+  cost is the local-search solution cost; for MMAP the seed configuration is
+  re-evaluated into a valid bound (exactly when the conditioned summation problem
+  is tractable, otherwise a single-configuration bound). Seeding is on by default
+  and controlled by the `ls-*` options below.
+- **i-bound and treewidth.** `wmb`, `ijgp`, `jglp` and the search heuristics used
+  by `aobb`/`braobb`/`aobf`/`rbfaoo` are parameterized by the `ibound`. `cte`,
+  `bte`, `lbp` and `gibbs` do not use an i-bound.
 
 # Dependencies
 
@@ -87,16 +136,23 @@ values for the `t` parameter are:
 - `MERLIN_ALGO_JGLP` : Join graph linear programming
 - `MERLIN_ALGO_WMB` : Weighted mini-bucket elimination
 - `MERLIN_ALGO_BTE` : Bucket tree elimination
-- `MERLIN_ALGO_CTE` : Clique Tree Elimination algorithm
-- `MERLIN_ALGO_AOBB` : AND/OR branch and bound search (not implemented yet)
-- `MERLIN_ALGO_AOBF` : Best-first AND/OR search (not implemented yet)
-- `MERLIN_ALGO_RBFAOO` : Recursive best-first AND/OR search (not implemented yet)
+- `MERLIN_ALGO_CTE` : Clique tree elimination
+- `MERLIN_ALGO_AOBB` : AND/OR branch and bound search (MAP, MMAP)
+- `MERLIN_ALGO_BRAOBB` : Breadth-rotating AND/OR branch and bound search (MAP, MMAP)
+- `MERLIN_ALGO_AOBF` : Best-first AND/OR search / AO\* (MAP, MMAP)
+- `MERLIN_ALGO_RBFAOO` : Recursive best-first AND/OR search (MAP, MMAP)
+- `MERLIN_ALGO_SLS` : Stochastic local search / G+StS (MAP, MMAP)
+- `MERLIN_ALGO_GLS` : Guided local search / GLS+ (MAP, MMAP)
+
+  See the [Algorithms](#algorithms) table above for the family, exact/approximate
+  classification, supported tasks, and key parameters of each algorithm.
 
           void set_ibound(size_t ibound)
 
   This method sets the i-bound parameter which is used by the following
-  algorithms: `WMB`, `IJGP`, `JGLP` (as well as search based ones `AOBB`, `AOBF`,
-  and `RBFAOO`). The default value is `4`.
+  algorithms: `WMB`, `IJGP`, `JGLP`, the AND/OR search solvers `AOBB`, `BRAOBB`,
+  `AOBF`, `RBFAOO` (which build a weighted mini-bucket heuristic), and the local
+  search solvers `SLS`/`GLS` for MMAP. The default value is `4`.
 
           void set_iterations(size_t iter)
 
@@ -109,6 +165,37 @@ values for the `t` parameter are:
 
   This method sets the number of samples to be generated in each iteration of the
   `GIBBS` sampling algorithm. The default value is `100`.
+
+          void set_time_limit(double seconds)
+
+  This method sets a wall-clock time limit (in seconds) for the search solvers
+  (`AOBB`, `BRAOBB`, `AOBF`, `RBFAOO`, `SLS`, `GLS`). A value of `0` (default)
+  means unlimited. For the exact branch-and-bound solvers the search is *anytime*:
+  when the limit is reached it returns the best complete solution found so far
+  (reported with `optimal: false`).
+
+          void set_rotate_limit(size_t nodes)
+
+  This method sets the number of node expansions `BRAOBB` performs on one
+  subproblem before rotating to the next (`0` disables rotation). The default
+  value is `1000`.
+
+          void set_seed(size_t seed)
+
+  This method sets the seed of the random number generator used by the stochastic
+  algorithms (`GIBBS`, `SLS`, `GLS`, and the local-search seed of `AOBB`/`BRAOBB`).
+  The default value is `12345678`.
+
+          void set_ls_seed(bool enabled)
+          void set_ls_time_limit(double seconds)
+          void set_ls_max_flips(long flips)
+
+  These methods control the local-search (GLS+) incumbent seed used by `AOBB` and
+  `BRAOBB` for both MAP and MMAP. `set_ls_seed` enables/disables seeding (default
+  enabled); `set_ls_time_limit` sets the seed time budget in seconds (default
+  `5.0`, capped so it does not consume the whole search `time-limit`); and
+  `set_ls_max_flips` sets a flip budget for the seed (`0`, the default, lets the
+  time budget govern).
 
           void run()
 
@@ -262,10 +349,16 @@ line arguments:
 - `--output-file <filename>` - is the output file where the solutions is written
 - `--output-format <format>` - is the format of the output file, use either `uai` or `json`
 - `--task <task>` - is the inference task and it can be one of the following: `PR`, `MAR`, `MAP`, `MMAP`, `EM`
-- `--algorithm <alg>` - is the inference algorithm and it can be one of the following: `wmb`, `bte`, `cte`, `ijgp`,`jglp`, `lbp` or `gibbs`
-- `--ibound <n>` - is the ibound used by `wmb`, `ijgp`, `jglp` algorithms
+- `--algorithm <alg>` - is the inference algorithm and it can be one of the following: `wmb`, `bte`, `cte`, `ijgp`, `jglp`, `lbp`, `gibbs`, `aobb`, `braobb`, `aobf`, `rbfaoo`, `sls`, `gls` (`gls+`) — see the [Algorithms](#algorithms) table for the tasks each one supports
+- `--ibound <n>` - is the ibound used by `wmb`, `ijgp`, `jglp` and the AND/OR search solvers (`aobb`, `braobb`, `aobf`, `rbfaoo`; also `sls`/`gls` for MMAP)
 - `--iterations <n>` - is the number of iterations used by `wmb`, `ijgp`, `lbp` and `jglp`
 - `--samples <n>` - is the number of samples used by `gibbs`
+- `--time-limit <seconds>` - wall-clock time limit for the search solvers (`aobb`, `braobb`, `aobf`, `rbfaoo`, `sls`, `gls`); `0` means unlimited. The branch-and-bound solvers are anytime and return the best solution found so far when the limit is hit
+- `--rotate-limit <n>` - number of node expansions `braobb` performs on a subproblem before rotating to the next (default `1000`; `0` disables rotation)
+- `--seed <n>` - seed for the random number generator used by the stochastic algorithms (`gibbs`, `sls`, `gls`, and the local-search seed of `aobb`/`braobb`); default `12345678`
+- `--ls-seed` / `--no-ls-seed` - enable (default) or disable seeding the `aobb`/`braobb` incumbent with a GLS+ local-search solution (MAP and MMAP)
+- `--ls-time-limit <seconds>` - time budget for the GLS+ incumbent seed (default `5.0`, capped so it does not consume the whole `--time-limit`)
+- `--ls-max-flips <n>` - flip budget for the GLS+ incumbent seed (`0`, the default, lets the time budget govern)
 - `--help` - lists the options
 - `--debug` - activate the debug mode
 - `--verbose <n>` - is the verbosity level (`1=low`, `2=medium`, `3=high`)
@@ -276,11 +369,25 @@ line arguments:
 
 Run `./merlin --help` to get the complete list of arguments.
 
-Example of command line:
+Example (approximate MAR with WMB):
 
 `./merlin --input-file pedigree1.uai --evidence-file pedigree1.evid --task MAR --algorithm wmb --ibound 4 --iterations 10 --output-format json`
 
-This example will run the WMB algorithm with ibound 10 and 10 iterations to solve the MAR task (calculate posterior marginals) on the `pedigree1.uai` instance given evidence `pedigree1.evid`.
+This example runs the WMB algorithm with i-bound 4 and 10 iterations to solve the MAR task (calculate posterior marginals) on the `pedigree1.uai` instance given evidence `pedigree1.evid`.
+
+Example (exact anytime MAP with AND/OR branch-and-bound):
+
+`./merlin --input-file pedigree1.uai --evidence-file pedigree1.evid --task MAP --algorithm aobb --ibound 6 --time-limit 60 --output-format json`
+
+This runs AOBB with a mini-bucket heuristic of i-bound 6 and a 60-second time limit. If the search completes it returns the proven-optimal MAP configuration (`optimal: true`); otherwise it returns the best configuration found within the limit. The incumbent is seeded with a GLS+ local-search solution unless `--no-ls-seed` is given.
+
+Example (exact MMAP with breadth-rotating AND/OR search):
+
+`./merlin --input-file pedigree1.uai --query-file pedigree1.map --task MMAP --algorithm braobb --ibound 8 --time-limit 120`
+
+Example (fast approximate MAP with guided local search):
+
+`./merlin --input-file pedigree1.uai --task MAP --algorithm gls --time-limit 10 --seed 42`
 
 All files (input, evidence, query) must be specified in the UAI files format.
 See the next section for more details.
@@ -613,6 +720,12 @@ the evidence variables)
         ]
     }
 ```
+
+The exact search solvers (`aobb`, `braobb`, `aobf`, `rbfaoo`) add an `"optimal"`
+field to the MAP/MMAP JSON output: `true` when the search proved optimality and
+`false` when a `--time-limit` was reached before completion (in which case the
+reported `value`/`solution` is the best found so far). On the console these
+solvers also report the number of nodes expanded (total, AND, and OR).
 
 ### Marginal MAP `MMAP`
 

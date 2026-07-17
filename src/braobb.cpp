@@ -198,8 +198,12 @@ void braobb::run() {
 			// If the node expanded into children (not solved in place), leave it
 			// on the stack; it will be revisited and aggregated once the children
 			// solve. Only fall through to pop+aggregate if it solved immediately.
-			if (!node->solved)
+			if (!node->solved) {
+				++m_num_expansions;
+				if (node->type == AO_AND) ++m_num_expansions_and;
+				else ++m_num_expansions_or;
 				continue;
+			}
 		}
 
 		// ---- Second visit (or solved-in-place): aggregate this node, pop it. ----
@@ -309,6 +313,9 @@ void braobb::run() {
 	std::cout << "[BRAOBB] Finished searching in "
 			<< (timeSystem() - m_start_time) << " seconds" << std::endl;
 	std::cout << "[BRAOBB] + rotate limit     : " << m_rotate_limit << std::endl;
+	std::cout << "[BRAOBB] + nodes expanded   : " << m_num_expansions << std::endl;
+	std::cout << "[BRAOBB] + AND nodes        : " << m_num_expansions_and << std::endl;
+	std::cout << "[BRAOBB] + OR nodes         : " << m_num_expansions_or << std::endl;
 	if (m_caching)
 		std::cout << "[BRAOBB] + cache hits       : " << m_num_cache_hits << std::endl;
 	if (timed_out)

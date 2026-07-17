@@ -614,8 +614,9 @@ void rbfaoo::run() {
 
 	std::cout << "[RBFAOO] Finished searching in "
 			<< (timeSystem() - m_start_time) << " seconds" << std::endl;
-	std::cout << "[RBFAOO] + OR nodes         : " << m_num_expanded_or << std::endl;
+	std::cout << "[RBFAOO] + nodes expanded   : " << m_num_expanded << std::endl;
 	std::cout << "[RBFAOO] + AND nodes        : " << m_num_expanded_and << std::endl;
+	std::cout << "[RBFAOO] + OR nodes         : " << m_num_expanded_or << std::endl;
 	if (m_task == Task::MMAP)
 		std::cout << "[RBFAOO] + SUM evaluations  : " << m_num_sum_evals << std::endl;
 	if (timed_out)

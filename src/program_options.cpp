@@ -51,7 +51,7 @@ ProgramOptions* parseCommandLine(int argc, char** argv) {
 			("time-limit,l", po::value<int>(), "time limit in seconds")
 			("rotate-limit,r", po::value<int>(), "BRAOBB nodes per subproblem before rotating (default 1000)")
 			("seed,s", po::value<int>(), "seed for the random number generator")
-			("ls-seed", "seed AOBB/BRAOBB with a GLS+ local-search solution (MAP only; default on)")
+			("ls-seed", "seed AOBB/BRAOBB with a GLS+ local-search solution (MAP and MMAP; default on)")
 			("no-ls-seed", "disable the GLS+ incumbent seed for AOBB/BRAOBB")
 			("ls-time-limit", po::value<double>(), "time budget for the GLS+ incumbent seed in seconds (default 5.0)")
 			("ls-max-flips", po::value<int>(), "flip budget for the GLS+ incumbent seed (0 = time governs)")

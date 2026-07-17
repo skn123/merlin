@@ -428,7 +428,9 @@ protected:
 	std::vector<std::unordered_map<size_t, cache_entry> > m_cache;
 
 	// Search statistics
-	size_t m_num_expansions;			///< Number of node expansions
+	size_t m_num_expansions;			///< Number of node expansions (total)
+	size_t m_num_expansions_and;		///< Number of AND-node expansions
+	size_t m_num_expansions_or;			///< Number of OR-node expansions
 	size_t m_num_cache_hits;			///< Number of OR-cache hits
 };
 

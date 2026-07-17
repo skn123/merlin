@@ -541,8 +541,10 @@ void aobf::run() {
 	// Report statistics.
 	std::cout << "[AOBF] Finished searching in "
 			<< (timeSystem() - m_start_time) << " seconds" << std::endl;
-	std::cout << "[AOBF] + OR nodes         : " << m_graph->or_nodes() << std::endl;
+	std::cout << "[AOBF] + nodes expanded   : "
+			<< (m_graph->and_nodes() + m_graph->or_nodes()) << std::endl;
 	std::cout << "[AOBF] + AND nodes        : " << m_graph->and_nodes() << std::endl;
+	std::cout << "[AOBF] + OR nodes         : " << m_graph->or_nodes() << std::endl;
 	std::cout << "[AOBF] + cache hits (merge): " << m_num_cache_hits << std::endl;
 	if (m_task == Task::MMAP)
 		std::cout << "[AOBF] + SUM evaluations  : " << m_num_sum_evals << std::endl;
